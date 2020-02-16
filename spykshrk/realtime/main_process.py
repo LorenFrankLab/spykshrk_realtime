@@ -649,24 +649,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 rewarded_arm = rewarded_arm_file_line
             rewarded_arm = np.int(rewarded_arm[0:2])
             print('last rewarded arm = ',rewarded_arm)
-            if rewarded_arm == 1:
-                self.arm_replay_counter = [1,0,0,0,0,0,0,0]
-            elif rewarded_arm == 2:
-                self.arm_replay_counter = [0,1,0,0,0,0,0,0]
-            elif rewarded_arm == 3:
-                self.arm_replay_counter = [0,0,1,0,0,0,0,0]
-            elif rewarded_arm == 4:
-                self.arm_replay_counter = [0,0,0,1,0,0,0,0]
-            elif rewarded_arm == 5:
-                self.arm_replay_counter = [0,0,0,0,1,0,0,0]
-            elif rewarded_arm == 6:
-                self.arm_replay_counter = [0,0,0,0,0,1,0,0]
-            elif rewarded_arm == 7:
-                self.arm_replay_counter = [0,0,0,0,0,0,1,0]
-            elif rewarded_arm == 8:
-                self.arm_replay_counter = [0,0,0,0,0,0,0,1]
-            elif rewarded_arm == 0:
-                self.arm_replay_counter = [0,0,0,0,0,0,0,0]
+            if rewarded_arm > 0:
+                self.arm_replay_counter[rewarded_arm - 1] = 1
 
         # check posterior lockout and normal lockout with print statement - seems to work
         if self._posterior_in_lockout == False and self._in_lockout == True:
