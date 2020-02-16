@@ -590,8 +590,8 @@ class PointProcessDecoder(realtime_logging.LoggingClass):
         self.posterior_sum_result = np.zeros((1,9))
         #print('zeros shape: ',self.posterior_sum_result)
 
-        for j in np.arange(0,len(arm_coords_rt),1):
-            self.posterior_sum_result[0,j] = posterior[arm_coords_rt[j][0]:(arm_coords_rt[j][1]+1)].sum()
+        for region_ind, (start_ind, stop_ind) in enumerate(arm_coords_rt):
+            self.posterior_sum_result[0, region_ind] = posterior[start_ind:stop_ind+1].sum()
             #print(self.posterior_sum_result)
             #print('whole posterior sum',posterior.sum())
         # posterior sum vector seems good - always adds to 1
