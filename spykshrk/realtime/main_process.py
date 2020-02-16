@@ -653,7 +653,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self.arm_replay_counter[rewarded_arm - 1] = 1
 
         # check posterior lockout and normal lockout with print statement - seems to work
-        if self._posterior_in_lockout == False and self._in_lockout == True:
+        if not self._posterior_in_lockout and self._in_lockout:
             #print('inside posterior sum delay time, bin timestamp:',bin_timestamp/30)
             pass
 
@@ -691,7 +691,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.post_sum_sliding_window_actual = np.ptp(self.posterior_sum_timestamps)/30
 
         # start of a ripple: check posterior sum and then send message
-        if self._posterior_in_lockout == True and self.velocity < self.config['ripple_conditioning']['ripple_detect_velocity'] and self.shortcut_message_sent == False:
+        if self._posterior_in_lockout and self.velocity < self.config['ripple_conditioning']['ripple_detect_velocity'] and not self.shortcut_message_sent:
             self.posterior_time_bin += 1
             self.shortcut_message_arm = 99
             self.ripple_end = 0
@@ -741,7 +741,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                       self.norm_posterior_arm_sum[3],self.norm_posterior_arm_sum[4],self.norm_posterior_arm_sum[5],
                                       self.norm_posterior_arm_sum[6],self.norm_posterior_arm_sum[7],self.norm_posterior_arm_sum[8])
 
-        elif self._posterior_in_lockout == False:
+        elif not self._posterior_in_lockout:
             self.shortcut_message_sent = False
             self.posterior_time_bin = 0
             self.posterior_spike_count = 0
@@ -756,7 +756,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # running sum of posterior during a ripple
         # marker for ripple detection is: self._in_lockout NO it's self._posterior_in_lockout
         # marker for already reached sum above threshold: self.shortcut_message_sent
-        if self.config['ripple_conditioning']['posterior_sum_rip_only'] and self._posterior_in_lockout == True and self.velocity < self.config['ripple_conditioning']['ripple_detect_velocity'] and self.shortcut_message_sent == False:
+        if self.config['ripple_conditioning']['posterior_sum_rip_only'] and self._posterior_in_lockout and self.velocity < self.config['ripple_conditioning']['ripple_detect_velocity'] and not self.shortcut_message_sent:
 
             #if self.ripple_time_bin == 0:
             #    self.ripple_number += 1
@@ -860,7 +860,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # these records are indicated by: ripple_end = 1 and shortcut_message_sent = 0
         # say in printout whether ripple ended because of not enough bins or posterior sum below threhsold
         # variable shortcue_message_arm: 99 if <10 time bins or no arm above threshold, otherwise repeated arm
-        elif self.config['ripple_conditioning']['posterior_sum_rip_only'] and self.no_ripple_time_bin == 1 and self.shortcut_message_sent == False:
+    elif self.config['ripple_conditioning']['posterior_sum_rip_only'] and self.no_ripple_time_bin == 1 and not self.shortcut_message_sent:
             if self.posterior_time_bin < 10:
                 print('ripple ended before 10 time bins',' ',np.around(self.norm_posterior_arm_sum,decimals=2),
                       'ripple: ',self.ripple_number,'posterior sum: ',np.around(self.norm_posterior_arm_sum.sum(),decimals=2),
@@ -896,7 +896,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                               self.norm_posterior_arm_sum[6],self.norm_posterior_arm_sum[7],self.norm_posterior_arm_sum[8])
 
         # end of posterior lockout signals end of ripple
-        elif self.config['ripple_conditioning']['posterior_sum_rip_only'] and self._posterior_in_lockout == False:
+    elif self.config['ripple_conditioning']['posterior_sum_rip_only'] and not self._posterior_in_lockout:
             self.no_ripple_time_bin += 1
 
             if self.no_ripple_time_bin > 2:
