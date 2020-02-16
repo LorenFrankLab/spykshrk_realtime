@@ -496,7 +496,7 @@ class PointProcessDecoder(realtime_logging.LoggingClass):
 
         # Compute posterior
         # MEC: switch to nansum
-        self.posterior = self.likelihood * (self.transition_mat * self.prev_posterior).sum(axis=1)
+        self.posterior = self.likelihood * (self.transition_mat @ self.prev_posterior)
         #self.posterior = self.likelihood * np.nansum(self.transition_mat * self.prev_posterior,axis=1)
         # Normalize
         # MEC: switch to nansum
@@ -554,7 +554,7 @@ class PointProcessDecoder(realtime_logging.LoggingClass):
         self.likelihood = self.likelihood / self.likelihood.sum()
 
         # Compute posterior
-        self.posterior = self.likelihood * (self.transition_mat * self.prev_posterior).sum(axis=1)
+        self.posterior = self.likelihood * (self.transition_mat @ self.prev_posterior)
         # Normalize
         self.posterior = self.posterior / self.posterior.sum()
 
