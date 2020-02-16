@@ -442,7 +442,8 @@ class PointProcessDecoder(realtime_logging.LoggingClass):
         self.likelihood = global_prob_no
 
         # Compute posterior for no spike
-        self.posterior = self.likelihood * (self.transition_mat * self.prev_posterior).sum(axis=1)
+        self.posterior = self.likelihood * (
+            self.transition_mat @ self.prev_posterior)
         # Normalize
         self.posterior = self.posterior / self.posterior.sum()
 
