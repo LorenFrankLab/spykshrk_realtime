@@ -26,10 +26,10 @@ class TimingMessage(PrintableMessage):
 
     def __init__(self, label, timestamp=0, start_rank=-1, timing_data=None):
         """
-        
+
         Args:
-            label: 
-            start_rank: 
+            label:
+            start_rank:
         """
 
         if len(label) > 12:
@@ -53,9 +53,9 @@ class TimingMessage(PrintableMessage):
     @classmethod
     def unpack(cls, message_bytes):
         """
-        
+
         Args:
-            message_bytes: 
+            message_bytes:
 
         Returns:
             TimingMessage: The de-serialized TimingMessage object.

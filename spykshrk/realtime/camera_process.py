@@ -39,7 +39,7 @@ class LinearPositionAssignment:
         hardcode_shiftamount = 4 # add this stagger to sum of previous shifts (was 20 for 1cm)
         # for now set all arm lengths to 60 for 1cm (12 for 5cm)
         linearization_arm_length = 12
-    
+
         # Define dictionary for shifts for each arm segment
 
         # with this setup max position is 136
@@ -53,15 +53,15 @@ class LinearPositionAssignment:
                temporary_variable_shift = 4
 
             # replace inner and outer box with 8 parallel segments
-            
+
             # toggle this for 8 vs 4 arms
             if arm < 8:
             #if arm < 4:
-               temporary_variable_shift = 0               
+               temporary_variable_shift = 0
 
             # for first arm replace linearization_arm_length with 7 for the box
             # old segments for box, set this to 9, new parallel segments for box, set to 8
-            
+
             # toggle this for 4 vs 8 arms
             elif arm == 8:
             #elif arm == 4:
@@ -70,7 +70,7 @@ class LinearPositionAssignment:
 
             else: # if arms 2-8, shift with gap
                temporary_variable_shift = hardcode_shiftamount + 12 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
-        
+
             # # 4 arms with single segment between home and wait well
             # # home to wait
             # if arm == 0:
@@ -83,11 +83,11 @@ class LinearPositionAssignment:
             # # first outer arm
             # elif arm == 5:
             #     temporary_variable_shift = hardcode_shiftamount + 8
-            
+
             # # outer arms
             # else:
             #     temporary_variable_shift = hardcode_shiftamount + 12 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
-            
+
             self.shift_linear_distance_by_arm_dictionary[arm] = temporary_variable_shift
             #print(self.shift_linear_distance_by_arm_dictionary)
 
@@ -95,7 +95,7 @@ class LinearPositionAssignment:
 
     def assign_position(self, segment, segment_pos):
         self.assigned_pos = 0
-        #print('segment',segment,'location',np.around(segment_pos,decimals=2))        
+        #print('segment',segment,'location',np.around(segment_pos,decimals=2))
 
         # now we can use the good linearization, so box is 8 bins with 4 inner (segment 0) and 4 outer (segments 1-8)
         # bin position here - use math.ceil to round UP for arms and math.floor to round down for box
@@ -104,7 +104,7 @@ class LinearPositionAssignment:
         #    self.assigned_pos = math.floor(segment_pos*4 + self.shift_linear_distance_by_arm_dictionary[segment])
         #elif segment > 0 and segment < 9:
         #    self.assigned_pos = math.floor(segment_pos*4 + self.shift_linear_distance_by_arm_dictionary[segment])
-        
+
         # for linearization with just 8 parallel segments for box
         # fixed so that box is 9 bins long (this matches 45cm at 5cm/bin)
         # fixed so that any values in box where segment_pos = 1, get set back to bin 8, need bin 9 to be empty
@@ -249,7 +249,7 @@ class VelocityCalculator:
         #cmperpx = 1/network.pxpercm
         cmperpx = 0.2
 
-        # note: for remy cmperpx should be 0.2 
+        # note: for remy cmperpx should be 0.2
         # it seems like the speed is still pretty high with jittering of headstage...
         # maybe this is because positon isnt smoothed??
 
@@ -291,7 +291,7 @@ class VelocityCalculator:
         #cmperpx = 1/network.pxpercm
         cmperpx = 0.2
 
-        # note: for remy cmperpx should be 0.2 
+        # note: for remy cmperpx should be 0.2
         # it seems like the speed is still pretty high with jittering of headstage...
         # maybe this is because positon isnt smoothed??
 
@@ -320,11 +320,10 @@ class VelocityCalculator:
         #    self.ind = self.NSPEED_FILT_POINTS - 1
 
         ##print('speed',self.smoothSpeed)
-        return self.speed        
+        return self.speed
 
 #initialize VelocityCalculator
 velCalc = VelocityCalculator()
 
 #initialize LinearPositionAssignment
 linPosAssign = LinearPositionAssignment()
-

@@ -92,10 +92,10 @@ import spykshrk.realtime.rst.RSTPython as RST
 #         self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['enocder'],
 #                        tag=realtime_base.MPIMessageTag.LINEAR_POS_AND_VEL)
 #         self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'],
-#                        tag=realtime_base.MPIMessageTag.LINEAR_POS_AND_VEL)        
+#                        tag=realtime_base.MPIMessageTag.LINEAR_POS_AND_VEL)
 #         self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['ripple'],
-#                        tag=realtime_base.MPIMessageTag.LINEAR_POS_AND_VEL)        
-    
+#                        tag=realtime_base.MPIMessageTag.LINEAR_POS_AND_VEL)
+
 #     def send_arm_coordinates(self, query_result_message: ArmCoordsResultsMessage):
 #         self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['encoder'],
 #                        tag=realtime_base.MPIMessageTag.ARM_COORDINATES)
@@ -133,9 +133,9 @@ class LinearPositionAssignment:
         hardcode_shiftamount = 4 # add this stagger to sum of previous shifts (was 20 for 1cm)
         # for now set all arm lengths to 60 for 1cm (12 for 5cm)
         linearization_arm_length = 12
-    
+
         # Define dictionary for shifts for each arm segment
-        #shift_linear_distance_by_arm_dictionary = dict() # initialize empty dictionary 
+        #shift_linear_distance_by_arm_dictionary = dict() # initialize empty dictionary
         # with this setup max position is 129
         for arm in hardcode_armorder: # for each outer arm
             if arm < 7: # if all box segments, do nothing
@@ -147,7 +147,7 @@ class LinearPositionAssignment:
 
             else: # if arms 2-8, shift with gap
                 temporary_variable_shift = hardcode_shiftamount + 12 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
-        
+
             self.shift_linear_distance_by_arm_dictionary[arm] = temporary_variable_shift
 
         return self.shift_linear_distance_by_arm_dictionary
@@ -199,7 +199,7 @@ class VelocityCalculator:
         #cmperpx = 1/network.pxpercm
         cmperpx = 0.2
 
-        # note: for remy cmperpx should be <0.2 
+        # note: for remy cmperpx should be <0.2
         # it seems like the speed is still pretty high with jittering of headstage...
         # maybe this is because positon isnt smoothed??
 
@@ -303,7 +303,7 @@ linPosAssign = LinearPositionAssignment()
 #                 speed = velCalc.calculator(npbuff[0][3], npbuff[0][4])
 #                 linposassign = linPosAssign.assign_position(npbuff[0][1], npbuff[0][2])
 
-#                 # want to report timing and latency of the velocity caclulator                
+#                 # want to report timing and latency of the velocity caclulator
 #                 self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
 #                                    datatype=datatypes.Datatypes.POSITION, label='camera')
 

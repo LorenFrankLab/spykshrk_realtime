@@ -77,7 +77,7 @@ class RippleThresholdState(rt_logging.PrintableMessage):
     @classmethod
     def unpack(cls, message_bytes):
         timestamp, elec_grp_id, threshold_state, conditioning_thresh_state = struct.unpack(cls._byte_format, message_bytes)
-        return cls(timestamp=timestamp, elec_grp_id=elec_grp_id, 
+        return cls(timestamp=timestamp, elec_grp_id=elec_grp_id,
                    threshold_state=threshold_state, conditioning_thresh_state=conditioning_thresh_state)
 
 
@@ -313,7 +313,7 @@ class RippleFilter(rt_logging.LoggingClass):
             else:
                 if self.lfp_display_counter % 15000 == 0:
                     print('mean',self.elec_grp_id,' = ',np.around(self.ripple_mean,decimals=2),
-                          ' stdev',self.elec_grp_id,' = ',np.around(self.ripple_std,decimals=2))                    
+                          ' stdev',self.elec_grp_id,' = ',np.around(self.ripple_std,decimals=2))
 
             # open and read text file that will allow you to update ripple threshold
             # looks for three digits, 055 > 5.5 sd
@@ -363,7 +363,7 @@ class RippleFilter(rt_logging.LoggingClass):
                 # now need to add this new threshold to the ripple threshold message
                 if self.current_val >= (self.custom_baseline_mean + self.custom_baseline_std *
                                         self.conditioning_ripple_threshold):
-                    self.condition_thresh_crossed = True                
+                    self.condition_thresh_crossed = True
                 elif self.current_val >= (self.custom_baseline_mean + self.custom_baseline_std *
                                         self.param.ripple_threshold):
                     self.condition_thresh_crossed = False
@@ -385,7 +385,7 @@ class RippleFilter(rt_logging.LoggingClass):
         # rec_format='Ii??dd',
         #if self.current_time < 40000000:
         self.rec_base.write_record(realtime_base.RecordIDs.RIPPLE_STATE,
-                                   self.current_time, self.elec_grp_id, self.param.ripple_threshold, 
+                                   self.current_time, self.elec_grp_id, self.param.ripple_threshold,
                                    self.conditioning_ripple_threshold, self.thresh_crossed,
                                    self.in_lockout, self._custom_baseline_mean, self._custom_baseline_std,
                                    int(data), rd, self.current_val)
@@ -588,7 +588,7 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                 # this sends to stim_decider class in main_process.py that then applies the # of tetrode filter
                 self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,
                                                        elec_grp_id=datapoint.elec_grp_id,
-                                                       thresh_state=filter_state, 
+                                                       thresh_state=filter_state,
                                                        conditioning_thresh_state=conditioning_filter_state)
                 #also send thresh cross to decoder - only for rank == 2 aka first ripple_node
                 if self.rank == 2:
@@ -746,5 +746,3 @@ class RippleProcess(realtime_base.RealtimeProcess):
             self.class_log.info('Terminating RippleProcess (rank: {:})'.format(self.rank))
 
         self.class_log.info("Ripple Process Main Process reached end, exiting.")
-
-

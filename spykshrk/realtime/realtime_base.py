@@ -360,12 +360,12 @@ class ProfilerWrapperMeta(type):
 class RealtimeMeta(ExceptionLoggerWrapperMeta, ProfilerWrapperMeta):
     """ A metaclass that combines all coorperative metaclass features needed (wrapping the run/main_loop functions
     with cProfilers and catching unhandled exceptions.
-    
+
     Care needs to be taken that if the meta classes are modifying attributes, each of those modifications is unique.
     This is an issue when chaining the wrapping of functions, the name for the wrapping function needs to be unique,
     e.g. ProfileWrapperMeta and ExceptionLoggerWrapperMeta cannot both use a wrapping function with the same name
     (wrap), they must be unique (exception_wrap and profile_wrap).
-    
+
     """
     def __new__(mcs, name, bases, attrs):
         return super(RealtimeMeta, mcs).__new__(mcs, name, bases, attrs)

@@ -42,9 +42,9 @@ class BinaryRecordTypeMessage:
 
 class RemoteBinaryRecordsManager:
     """Remote manager for file records.
-    
+
     Only ONE of these classes should be instantiated per rank/process, per manager.
-    
+
     This class can generate messages that can be used to register records
     with the root BinaryRecordsManager and can process create record file messages,
     but it does not handle communication to the root BinaryRecordsManager.
@@ -178,10 +178,10 @@ class BinaryRecordsFileWriter:
     """File handler for a single Binary Records file.
 
     Current can only be created through a BinaryRecordCreateMessage (primarily for remote file creation).
-    
+
     The file name will be defined by the BinaryRecordCreateMessage's attributes and the mpi_rank parameter if specified:
     <file_prefix>.<manager_label>.<mpi_rank>.<file_postfix>
-    
+
     A Binary Records file consists of a JSON header prepended to the file that must define the following entries:
         file_prefix: The root file name that is shared if a data store spans multiple files
         file_id: A unique ID for the given file
@@ -262,4 +262,3 @@ class BinaryRecordsFileWriter:
 
     def close(self):
         self._file_handle.close()
-

@@ -37,7 +37,7 @@ class NoSpikeTimerThread(Thread):
         self.current_pos = current_pos
         self.config = config
         self.pos_hist = np.ones(self.config['encoder']['position']['bins'])/self.config['encoder']['position']['bins']
-        return self.timestamp, self.elec_grp_id, self.current_pos, self.pos_hist      
+        return self.timestamp, self.elec_grp_id, self.current_pos, self.pos_hist
 
     def run(self):
         #while not self.stopped.wait(self.config['pp_decoder']['bin_size']/30000):
@@ -190,7 +190,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
         # to turn on, uncomment the line, self.thread.start()
-        self.stopFlag = Event()          
+        self.stopFlag = Event()
         self.thread = NoSpikeTimerThread(self.stopFlag, self.spike_sent, self.mpi_send,
                                         self.spike_timestamp, self.spike_elec_grp_id, self.current_pos, self.config)
         #self.thread.start()
@@ -256,12 +256,12 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 max_2 = max(datapoint.data[2])
                 max_3 = max(datapoint.data[3])
                 max_channel = np.argmax([max_0,max_1,max_2,max_3])
-                
+
                 max_0_ind = np.argmax(datapoint.data[0])
                 max_1_ind = np.argmax(datapoint.data[1])
                 max_2_ind = np.argmax(datapoint.data[2])
                 max_3_ind = np.argmax(datapoint.data[3])
-                
+
                 if max_channel == 0:
                     amp_marks = [datapoint.data[0][max_0_ind],datapoint.data[1][max_0_ind],datapoint.data[2][max_0_ind],datapoint.data[3][max_0_ind]]
                 elif max_channel == 1:
@@ -348,7 +348,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_counter % 1000 == 0:
                     self.class_log.info('Received {} pos datapoints.'.format(self.pos_counter))
                 pass
-            
+
             if isinstance(datapoint, CameraModulePoint):
                 #NOTE (MEC, 9-1-19): we need to include encoding velocity when calling update_covariate
                 self.pos_counter += 1
@@ -362,7 +362,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.current_pos = self.linPosAssign.assign_position(datapoint.segment, datapoint.position)
                 #print('x smoothing: ',datapoint.x,self.smooth_x)
                 #print('y smoothing: ',datapoint.y,self.smooth_y)
-                
+
                 #print('encoder linear position: ',self.current_pos, ' velocity: ',self.current_vel)
                 #print('segment: ',datapoint.segment)
 
@@ -372,7 +372,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 if self.pos_counter % 1000 == 0:
                     self.class_log.info('Received {} pos datapoints.'.format(self.pos_counter))
-                pass                
+                pass
 
 
 class EncoderMPIRecvInterface(realtime_base.RealtimeMPIClass):

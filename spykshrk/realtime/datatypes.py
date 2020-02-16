@@ -141,5 +141,3 @@ class SystemTimePoint(PrintableMessage):
         self.timestamp = timestamp
         self.tv_sec = tv_sec
         self.tv_nsec = tv_nsec
-
-
