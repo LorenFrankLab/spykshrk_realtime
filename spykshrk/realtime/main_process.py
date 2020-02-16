@@ -266,7 +266,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.no_ripple_time_bin = 0
         self.replay_target_arm = self.config['pp_decoder']['replay_target_arm']
         #self.posterior_arm_sum = np.zeros((1,9))
-        self.posterior_arm_sum = np.asarray([0,0,0,0,0,0,0,0,0])
+        self.posterior_arm_sum = np.zeros((9,))
         # initialize with single 1 so that first pass throught posterior_sum works
         self.norm_posterior_arm_sum = np.asarray([0,1,0,0,0,0,0,0,0])
         self.box_post = 0
@@ -293,7 +293,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.postsum_timing_counter = 0
         #self.stim_message_sent = 0
         self.big_rip_message_sent = 0
-        self.arm_replay_counter = [0,0,0,0,0,0,0,0]
+        self.arm_replay_counter = np.zeros((8,))
         self.posterior_time_bin = 0
         self.posterior_spike_count = 0
         self.posterior_arm_threshold = self.config['ripple_conditioning']['posterior_sum_threshold']
@@ -305,7 +305,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # for continous running sum of posterior
         self.running_post_sum_counter = 0
         self.posterior_sum_array = np.zeros((self.config['ripple_conditioning']['post_sum_sliding_window'],9))
-        self.sum_array_sum = np.asarray([0,0,0,0,0,0,0,0,0])
+        self.sum_array_sum = np.zeros((9,))
         self.posterior_sum_timestamps = np.zeros((self.config['ripple_conditioning']['post_sum_sliding_window'],1))
         self.post_sum_sliding_window_actual = 0
 
@@ -638,7 +638,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # use this to prevent repeated rewards to a specific arm (set arm1_replay_counter)
         if self.thresh_counter % 10000 == 0:
             # reset counters each time you read the file - b/c file might not change
-            self.arm_replay_counter = [0,0,0,0,0,0,0,0]
+            self.arm_replay_counter = np.zeros((8,))
 
             with open('config/rewarded_arm_trodes.txt') as rewarded_arm_file:
                 fd = rewarded_arm_file.fileno()
@@ -918,8 +918,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             if self.no_ripple_time_bin > 2:
                 self.posterior_time_bin = 0
                 self.posterior_spike_count = 0
-                self.posterior_arm_sum = np.asarray([0,0,0,0,0,0,0,0,0])
-                self.norm_posterior_arm_sum = np.asarray([0,0,0,0,0,0,0,0,0])
+                self.posterior_arm_sum = np.zeros((9,))
+                self.norm_posterior_arm_sum = np.zeros((9,))
                 self.shortcut_message_arm = 99
                 self.shortcut_message_sent = False
 
