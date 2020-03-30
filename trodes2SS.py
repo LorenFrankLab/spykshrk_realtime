@@ -107,6 +107,10 @@ class TrodesImport:
 						tet_marks.columns=['c00','c01','c02','c03']
 					if len(tet_marks.columns) == 3:
 						tet_marks.columns=['c00','c01','c02']
+					if len(tet_marks.columns) == 2:
+						tet_marks.columns=['c00','c01']
+					if len(tet_marks.columns) == 1:
+						tet_marks.columns=['c00']
 					de_amps = de_amps.append(tet_marks)
 
 				de_amps.sort_index(level='timestamp', inplace=True)
@@ -116,6 +120,51 @@ class TrodesImport:
 
 		spk_amps.sampling_rate = self.Fs
 		return spk_amps
+
+	def fill_dead_chans(self, marks, tetinfo):
+
+		# add number of dead chan col to tetinfo
+		tmp = np.zeros((len(tetinfo),)) #initialize to get size right
+		#if deadchans entry is an array (multiple deadchans) or empty, we can calculate length
+		isarray = tetinfo['deadchans'].apply(lambda d: isinstance(d,np.ndarray)) 
+		tmp[isarray] = tetinfo['deadchans'][isarray].apply(lambda d: len(d))  # add length of deadchans list
+		# if it's an int (1 deadchan) fill in length with 1 (can't calc using len)
+		isint = tetinfo['deadchans'].apply(lambda d: isinstance(d,int)) 
+		tmp[isint] = 1
+		tetinfo['ndlength'] = tmp   # store lengths as an additional column. no dead chans = length 0 
+
+		marks.reset_index(inplace=True)
+
+		day= self.days
+		epoch = self.epochs
+		subtets = tetinfo.query('area=="ca1" & ndlength>0 & day==@day & epoch==@epoch').index.get_level_values('tetrode_number').unique().tolist() 
+		col_names = np.array(['c00','c01','c02','c03'])
+		for tet in subtets:
+			# if any chans contain all nans, then ignore which deadchan it is (data has already been removed; deadchans will always be the last channels)
+			# otherwise, deadchans contain real data and deadchan tells you which one should be zero'd out 
+			nanchans = np.array([np.all(np.isnan(marks['c00'].loc[marks['elec_grp_id']==tet])), np.all(np.isnan(marks['c01'].loc[marks['elec_grp_id']==tet])),
+				np.all(np.isnan(marks['c02'].loc[marks['elec_grp_id']==tet])), np.all(np.isnan(marks['c03'].loc[marks['elec_grp_id']==tet]))])
+			if np.any(nanchans):
+				deadlist= col_names[nanchans]
+				print('deadchans pre-stripped; replacing nans with zeros')
+			else:
+				deadchans = tetinfo.query("day==@day & epoch==@epoch & tetrode_number==@tet")['deadchans'].tolist()
+				deadlen = tetinfo.query("day==@day & epoch==@epoch & tetrode_number==@tet")['ndlength'].tolist()
+				print('deadchan data present; filling with nans according to deadchans list')
+				if deadlen[0] >1:   # multiple deadchans, process as array
+					deadlist = [col_names[x-1] for x in deadchans]
+					deadlist = deadlist[0]
+				else: # single deadchan, process as int
+					deadlist = [col_names[deadchans[0]-1]]
+			for channame in deadlist:
+				print('subbing zeros for '+ channame + ' on tet ' + str(tet))
+				marks[channame].mask(marks['elec_grp_id']==tet,0,inplace=True)
+
+		marks.set_index(['day','epoch','elec_grp_id','timestamp','time'],inplace=True,drop=True)
+		marks = marks.astype(np.int16, copy=False) 
+		return marks
+
+
 
 	def import_pos(self, xy = 'x'):
 

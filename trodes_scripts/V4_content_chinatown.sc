@@ -5,7 +5,7 @@
 % constants
 int deliverPeriodBox= 150   	% how long to deliver the reward at home/center
 int deliverPeriodOuter= 450   	% how long to deliver the reward at outer wells
-int lockoutPeriod= 25000 	% length of lockout
+int lockoutPeriod= 15000 	% length of lockout
 int proxTime = 200 		% amount of time allowed to be away from nose poke
 % variables
 int rewardWell = 0
@@ -122,7 +122,7 @@ end;
 function 16
 	disp('large ripple from spykshrk')
 	portout[6]=1 % reward
-	do in 30 
+	do in 300 
 		portout[6]=0 % reset reward
 	end	
 end;

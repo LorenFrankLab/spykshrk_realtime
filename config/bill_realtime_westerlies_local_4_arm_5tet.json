@@ -5,13 +5,13 @@
     "rank": {
         "supervisor": 0,
         "decoder": 1,
-        "ripples": [2,3,4,5,6],
-        "encoders": [7,8,9,10,11]
-    }, 
+        "ripples": [2,3,4,5],
+        "encoders": [6,7,8,9]
+    },
 
     "rank_settings": {
-        "enable_rec": [0, 1, 2, 3,4,5,6,7,8,9,10,11],
-        "enable_profiler": [0, 1, 2, 3,4,5,6,7,8,9,10,11]
+        "enable_rec": [0, 1, 2, 3,4,5,6,7,8,9],
+        "enable_profiler": [0, 1, 2, 3,4,5,6,7,8,9]
     },
 
     "files": {
@@ -118,7 +118,7 @@
             "29": 4,
             "30": 12000
         }
-    }, 
+    },
 
     "encoder": {
         "sampling_rate": 30000,
@@ -140,8 +140,11 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 5,
-        "spk_amp": 150
+        "vel": 15,
+        "spk_amp": 150,
+        "dead_channels": {
+            "4": 0
+        }
     },
 
     "decoder": "pp_decoder",
@@ -160,7 +163,7 @@
     "trodes_network": {
         "address" : "tcp://127.0.0.1",
         "port": 49152,
-        "decoding_tetrodes": [26,6,9,11,14],
-        "ripple_tetrodes": [10,13,17,19,29]
+        "decoding_tetrodes": [5,6,10,11],
+        "ripple_tetrodes": [8,7,6,10,19]
     }
 }

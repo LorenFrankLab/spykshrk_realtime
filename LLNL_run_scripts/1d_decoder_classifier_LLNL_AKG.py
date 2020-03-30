@@ -50,10 +50,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
     if tetlist is None:
         animalinfo  = {rat_name: Animal(directory=raw_directory, short_name=rat_name)}
         tetinfo = lfdp.tetrodes.make_tetrode_dataframe(animalinfo)
-        tetinfo['ndtype'] = tetinfo['deadchans'].apply(lambda d: isinstance(d,np.ndarray)) # add column with datatype of deadchans entry
-        tmp = tetinfo['deadchans'][tetinfo['ndtype'].values].apply(lambda d: len(d))   # add length of deadchans list
-        tetinfo['ndlength'] = tmp   # store lengths as an additional column. no dead chans = length 0 
-        tetrodes = tetinfo.query('area=="ca1" & ndlength==0 & day==@day & epoch==@epoch').index.get_level_values('tetrode_number').unique().tolist()   
+        tetrodes = tetinfo.query('area=="ca1" & day==@day & epoch==@epoch').index.get_level_values('tetrode_number').unique().tolist()   
     else:
         tetrodes= tetlist
 
@@ -76,6 +73,11 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
     # Import marks
     marks = datasrc.import_marks()
     print('original length: '+str(marks.shape[0]))
+
+    # fill in any deadchans with zeros
+    specific_tetinfo = tetinfo.query('tetrode_number==@tetrodes')  # pull the tetinfo for tets in list 
+    marks = datasrc.fill_dead_chans(marks, specific_tetinfo)
+    
     # OPTIONAL: to reduce mark number, can filter by size. Current detection threshold is 100  
     marks = trodes2SS.threshold_marks(marks, maxthresh=2000,minthresh=100)
     # remove any big negative events (artifacts?)

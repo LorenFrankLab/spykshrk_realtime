@@ -23,7 +23,7 @@ from spykshrk.franklab.data_containers import RippleTimes, pos_col_format, Poste
 
 from spykshrk.franklab.pp_decoder.pp_clusterless import OfflinePPEncoder, OfflinePPDecoder
 
-def main(path_base, rat_name, day, epoch, shift_amt, velthresh=4, use_enc_as_dec_flag=0, path_out):
+def main(path_base, rat_name, day, epoch, shift_amt, velthresh=4, use_enc_as_dec_flag=0, path_out,suffix = ''):
     print(datetime.now())
     today = str(date.today())
 
@@ -219,7 +219,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, velthresh=4, use_enc_as_dec
 
     #cell 15.1
     # save posterior and linear position - netcdf
-    posterior_file_name = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_posteriors_functionalized.nc')
+    posterior_file_name = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_posteriors_functionalized'+suffix+'.nc')
 
     post1 = posteriors.apply_time_event(rips, event_mask_name='ripple_grp')
     post2 = post1.reset_index()
@@ -230,7 +230,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, velthresh=4, use_enc_as_dec
 
     # to export linearized position to MatLab: again convert to xarray and then save as netcdf
 
-    position_file_name = os.path.join(path_out, rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_linearposition_functionalized.nc')
+    position_file_name = os.path.join(path_out, rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_linearposition_functionalized'+suffix+'.nc')
 
     linearized_pos1 = binned_linear_pos.apply_time_event(rips, event_mask_name='ripple_grp')
     linearized_pos2 = linearized_pos1.reset_index()
@@ -240,7 +240,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, velthresh=4, use_enc_as_dec
 
     #cell 15.2
     # save posterior as hdf5 
-    posterior_file_name_hdf5 = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_posteriors_functionalized.h5')
+    posterior_file_name_hdf5 = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_posteriors_functionalized'+suffix+'.h5')
     posteriors._to_hdf_store(posterior_file_name_hdf5,'/analysis', 'decode/clusterless/offline/posterior', 'sungod_trans_mat',overwrite=True)
     print('Saved hdf5 posteriors to '+posterior_file_name_hdf5)
 
@@ -258,11 +258,11 @@ def main(path_base, rat_name, day, epoch, shift_amt, velthresh=4, use_enc_as_dec
     #cell 17
     ## save classifier output
     base_name = os.path.join(path_out, rat_name + '_' + day_ep + '_shuffle_' + str(shift_amount) + '_posterior_')
-    fname = 'causal'
+    fname = 'causal'+suffix
     trodes2SS.convert_save_classifier(base_name, fname, causal_state1, causal_state2, causal_state3, tetrodes, decoder.likelihoods,
                                       encode_settings, decode_settings, rips, velocity_thresh_for_enc_dec, velocity_buffer, sungod_no_offset, order, shift_amount)
 
-    fname = 'acausal'
+    fname = 'acausal'+suffix
     trodes2SS.convert_save_classifier(base_name, fname, acausal_state1, acausal_state2, acausal_state3, tetrodes, decoder.likelihoods,
                                       encode_settings, decode_settings, rips, velocity_thresh_for_enc_dec, velocity_buffer, sungod_no_offset, order, shift_amount)
 

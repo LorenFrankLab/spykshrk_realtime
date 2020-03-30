@@ -44,13 +44,14 @@ class LinearPositionAssignment:
 
         # with this setup max position is 136
         for arm in hardcode_armorder: # for each outer arm
+            # not using inner vs outer box for remy
             # if inner box, do nothing
-            if arm == 0:
-               temporary_variable_shift = 0
+            #if arm == 0:
+            #   temporary_variable_shift = 0
 
             # if outer box segments add inner box
-            elif arm < 9 and arm > 0:
-               temporary_variable_shift = 4
+            #elif arm < 9 and arm > 0:
+            #   temporary_variable_shift = 4
 
             # replace inner and outer box with 8 parallel segments
 

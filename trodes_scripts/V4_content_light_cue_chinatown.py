@@ -42,8 +42,9 @@ def pokeOut(dio):
 	currWell = int(dio[1])
 	if currWell == homeWell: 
 		endHome()
-	if currWell == centerWell: 
-		endWait()    
+	# MEC commented out - moved to callback section
+	#if currWell == centerWell: 
+	#	endWait()    
 	for num in range(len(outerWells)):
 		if currWell == outerWells[num]:
 			endOuter()
@@ -401,6 +402,8 @@ def callback(line):
 	if line.find("BEEP 2") >= 0: # make a beep and deliver reward
 		beep()
 		generate_beep()
+		#mec added to turn on outer lights at same time as beep
+		endWait()
 	if line.find("LOCKOUT") >= 0: # lockout procedure
 		lockout(re.findall(r'\d+',line))
 	if line.find("LOCKEND") >= 0: # reset trialtype to 0
@@ -442,7 +445,7 @@ arm1_Goal = 0
 arm2_Goal = 0
 arm3_Goal = 0
 arm4_Goal = 0
-outerarm_required_rewards = 1
+outerarm_required_rewards = 20
 
 # task state variable
 # 1 = cued reward well

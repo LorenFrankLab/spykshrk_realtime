@@ -449,7 +449,7 @@ class OfflinePPDecoder(object):
         print("Beginning posterior calculation")
         self.recalc_posterior()
 
-        return self.posteriors_obj, self.likelihoods
+        return self.posteriors_obj
 
     def recalc_likelihood(self):
         self.likelihoods = self.calc_observation_intensity(self.observ_obj,
@@ -600,9 +600,14 @@ class OfflinePPDecoder(object):
                 obv_in_bin = obv_in_bin / (np.nansum(obv_in_bin) * enc_settings.pos_bin_delta)
 
             # Contribution for electrodes that no spikes in this bin
-            for elec_grp_id in elec_set.symmetric_difference(elec_grp_list):
-                obv_in_bin = obv_in_bin * prob_no_spike[elec_grp_id]
-                obv_in_bin = obv_in_bin / (np.nansum(obv_in_bin) * enc_settings.pos_bin_delta)   # AKG added, normalize
+            # MEC: NOTE 2-17-20 Loren says we should multiply by global_prob_no spike here
+            #for elec_grp_id in elec_set.symmetric_difference(elec_grp_list):
+            #    obv_in_bin = obv_in_bin * prob_no_spike[elec_grp_id]
+            #    obv_in_bin = obv_in_bin / (np.nansum(obv_in_bin) * enc_settings.pos_bin_delta)   # AKG added, normalize
+
+            # NEW 3/1/20: multiply by global prob_no_spike
+            obv_in_bin * global_prob_no_spike
+            obv_in_bin = obv_in_bin / (np.nansum(obv_in_bin) * enc_settings.pos_bin_delta)   #  normalize
 
             # Checking if missing bin has more than 1 whole number (and the rest are zeros)
             missing_bins_list = np.array(missing_bins_list)

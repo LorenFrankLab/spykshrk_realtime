@@ -123,9 +123,15 @@ def change_to_directory_make_if_nonexistent(directory_path):
     os.getcwd()
     
 
-def run_linearization_routine(animal, day, epoch, linearization_path, raw_path, gap_size=20):
+def run_linearization_routine(animal, day, epoch, linearization_path, raw_path, gap_size=20, optional_alternate_nodes=None, optional_output_suffix=None,lfdp_v9=False):
 
-    node_ref = linearization_path + 'set_arm_nodes.mat'
+    if optional_alternate_nodes:
+        node_ref = optional_alternate_nodes
+    else:
+        node_ref = linearization_path + 'set_arm_nodes.mat'
+
+    #node_ref = linearization_path + 'fievel_new_arm_nodes.mat'
+    #node_ref = linearization_path + 'remy_20_2_new_arm_nodes.mat'
     linearcoord = sio.loadmat(node_ref)['linearcoord_one_box'][0]
 
     animalinfo  = {animal: Animal(directory=raw_path, short_name=animal)}
@@ -157,15 +163,35 @@ def run_linearization_routine(animal, day, epoch, linearization_path, raw_path, 
     #lfdp.track_segment_classification.plot_track(track_graph)
 
     position = position_info.loc[:, ['x_position', 'y_position']].values
-
-    track_segment_id = lfdp.track_segment_classification.classify_track_segments(
-            track_graph, position,
-            route_euclidean_distance_scaling=1,
-            sensor_std_dev=1)
-
     center_well_id = 0
-    linear_distance = lfdp.track_segment_classification.calculate_linear_distance(
-                track_graph, track_segment_id, center_well_id, position)
+
+    if lfdp_v9:  # slight change in syntax and params for the new version
+        position_info['track_segment_id'] = lfdp.track_segment_classification.classify_track_segments(
+                track_graph, position,
+                route_euclidean_distance_scaling=1,
+                sensor_std_dev=3, diagonal_bias=0)
+        
+        (position_info['linear_distance'], position_info['projected_x'], position_info['projected_y']) = lfdp.track_segment_classification.calculate_linear_distance(
+                    track_graph, position_info['track_segment_id'], center_well_id, position)
+
+        #backfill nans, and report how many
+        print('Nans backfilled in linearization routine:' +str(len(np.where(np.isnan(position_info['track_segment_id'])))))
+        position_info['track_segment_id'].fillna(method='backfill',inplace=True)
+        position_info['linear_distance'].fillna(method='backfill',inplace=True)
+
+        track_segment_id = np.copy(position_info['track_segment_id'])
+        linear_distance_arm_shift = np.copy(position_info['linear_distance'])
+
+    else:
+        track_segment_id = lfdp.track_segment_classification.classify_track_segments(
+                track_graph, position,
+                route_euclidean_distance_scaling=1,
+                sensor_std_dev=1)
+
+        linear_distance = lfdp.track_segment_classification.calculate_linear_distance(
+                    track_graph, track_segment_id, center_well_id, position)
+
+        linear_distance_arm_shift = np.copy(linear_distance)
 
         # this section calculates the shift amounts for each arm
     arm_distances = (edge_distances[1],edge_distances[3],edge_distances[5],edge_distances[7],
@@ -188,14 +214,17 @@ def run_linearization_routine(animal, day, epoch, linearization_path, raw_path, 
     newseg[(newseg < 8)] = 0
 
         # 2) Shift linear distance for each arm 
-    linear_distance_arm_shift = np.copy(linear_distance)
     for seg in shift_linear_distance_by_arm_dictionary:
         linear_distance_arm_shift[(newseg==(seg+8))]+=shift_linear_distance_by_arm_dictionary[(seg)]  
 
     #save outputs
     output_base = linearization_path + animal + '_' + str(day) + '_' +str(epoch) + '_'
-    lin_output1 = output_base + 'linearized_distance.npy'
-    lin_output2 = output_base + 'linearized_track_segments.npy'
+    if optional_output_suffix:
+        lin_output1 = output_base + optional_output_suffix + '_distance.npy'
+        lin_output2 = output_base + optional_output_suffix + '_track_segments.npy'
+    else:
+        lin_output1 = output_base + 'linearized_distance.npy'
+        lin_output2 = output_base + 'linearized_track_segments.npy'
     #lin_output3 = output_base + 'linearization_variables.mat'
     np.save(lin_output1, linear_distance_arm_shift)
     np.save(lin_output2, track_segment_id)
@@ -521,7 +550,7 @@ def shift_enc_marks_for_shuffle(marks_obj, shift):
 
     return encoding_marks_shifted, shift_amount
 
-def decode_with_classifier(likelihoods_obj, sungod_transmat, occupancy, discrete_tm_val=.99):
+def decode_with_classifier(likelihoods_obj, sungod_transmat, occupancy, discrete_tm_val=.99,velmask = None):
         
     '''
     '''
@@ -550,12 +579,28 @@ def decode_with_classifier(likelihoods_obj, sungod_transmat, occupancy, discrete
     acausal_state1 = likelihoods.copy()
     acausal_state2 = likelihoods.copy()
     acausal_state3 = likelihoods.copy() 
-    posbin1 = np.isnan(likelihoods['x000'])  # use the first posbin to find nan time chunks
-    blocks = (posbin1 != posbin1.shift()).cumsum()   # define each group of non-nan values as a block
+    # nan out all the values
+    causal_state1.loc[:] = 0   # continuous
+    causal_state2.loc[:] = 0   # fragmented
+    causal_state3.loc[:] = 0  # hover 
+    acausal_state1.loc[:] = 0
+    acausal_state2.loc[:] = 0
+    acausal_state3.loc[:] = 0
+
+    if velmask is None: 
+        print('using first row nans')
+        nanbins = np.isnan(likelihoods['x000'])  # use the first posbin to find nan time chunks
+        blocks = (nanbins != nanbins.shift()).cumsum()   # define each group of non-nan values as a block
+        immoblocks = np.unique(blocks.loc[~nanbins])
+
+    else:
+        print('using velmask')  #if a mask has been provided, use it to decide when to run. mask = 1 when vel>thresh; 0 otherwise
+        blocks = (velmask != velmask.shift()).cumsum()
+        immoblocks = np.unique(blocks.loc[~velmask])
 
     # run classifier
-    for b in range(1,max(blocks)+1):    #  iterate through non-nan blocks
-        print('running block '+ str(b) +' of ' + str(max(blocks)))
+    for b in immoblocks:    #  iterate through non-nan blocks
+        print('running valid block '+ str(b) +' of ' + str(max(blocks)))
         chunk = likelihoods.loc[blocks==b].fillna(0).values   # get rid of the gap nans
         chunk_expanded = chunk[:,np.newaxis,:,np.newaxis] * np.ones((1,3,num_bins,1))   # put things in the right shape
         causal_posterior = _causal_classify(initial_conditions, continuous_state_transition,discrete_state_transition,chunk_expanded)
