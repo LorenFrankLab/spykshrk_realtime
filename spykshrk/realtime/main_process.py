@@ -431,6 +431,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                   timestamp, time, self._lockout_count, self._conditioning_in_lockout,
                                   num_above, self.big_rip_message_sent)
                 self._lockout_count += 1
+                print('end of lockout big ripple')
 
             # end lockout for running posterior sum at end of ripple
             # lockout hard coded for 10 msec (300 timestamps)
@@ -510,6 +511,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self._in_lockout = True
                 self._posterior_in_lockout = True
                 self._last_lockout_timestamp = timestamp
+                #print('last lockout timestamp',self._last_lockout_timestamp)
                 self._posterior_last_lockout_timestamp = timestamp
                 # this should allow us to tell difference between ripples that trigger conditioning
                 self.big_rip_message_sent = 0
@@ -751,7 +753,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                               4], self.norm_posterior_arm_sum[5],
                                           self.norm_posterior_arm_sum[6], self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
                 else:
-                    self.posterior_sum_statescript_message(1, detected_region)
+                    print('arm',detected_region)
+                    self.posterior_sum_statescript_message(detected_region, networkclient)
 
                 # need to add elif for no maximum location for whole ripple
                 # use the model from below
@@ -1091,12 +1094,14 @@ class MainMPISendInterface(realtime_base.RealtimeMPIClass):
                        tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
 
     def send_channel_selection(self, rank, channel_selects):
-        self.comm.send(obj=spykshrk.realtime.realtime_base.ChannelSelection(channel_selects), dest=rank,
+        #print('sending channel selection',rank,channel_selects)
+        #print('object',spykshrk.realtime.realtime_base.ChannelSelection(channel_selects))
+        self.comm.send(obj=realtime_base.ChannelSelection(channel_selects), dest=rank,
                        tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
 
     # MEC added
     def send_ripple_channel_selection(self, rank, channel_selects):
-        self.comm.send(obj=spykshrk.realtime.realtime_base.RippleChannelSelection(channel_selects), dest=rank,
+        self.comm.send(obj=realtime_base.RippleChannelSelection(channel_selects), dest=rank,
                        tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
 
     def send_new_writer_message(self, rank, new_writer_message):
@@ -1108,7 +1113,7 @@ class MainMPISendInterface(realtime_base.RealtimeMPIClass):
                        tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
 
     def send_turn_on_datastreams(self, rank):
-        self.comm.send(obj=spykshrk.realtime.realtime_base.TurnOnDataStream(), dest=rank,
+        self.comm.send(obj=realtime_base.TurnOnDataStream(), dest=rank,
                        tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
 
     def send_ripple_parameter(self, rank, param_message):
@@ -1237,6 +1242,7 @@ class MainSimulatorManager(rt_logging.LoggingClass):
                 rank=rip_rank, std_dict=rip_std_base_dict)
 
     def _stim_decider_startup(self):
+        print('startup stim decider')
         # Convert JSON Ripple Parameter config into message
         rip_param_message = ripple_process.RippleParameterMessage(
             **self.config['ripple']['RippleParameterMessage'])
@@ -1262,15 +1268,16 @@ class MainSimulatorManager(rt_logging.LoggingClass):
 
         # Round robin allocation of channels to encoders
         enable_count = 0
-        all_encoder_process_enable = [[]
-                                      for _ in self.config['rank']['encoders']]
+        all_encoder_process_enable = [[] for _ in self.config['rank']['encoders']]
         for chan_ind, chan_id in enumerate(trode_list):
             all_encoder_process_enable[enable_count % len(
                 self.config['rank']['encoders'])].append(chan_id)
             enable_count += 1
 
+        print('finished round robin')
         # Set channel assignments for all encoder ranks
         for rank_ind, rank in enumerate(self.config['rank']['encoders']):
+            print('rank',rank,'encoder tet',all_encoder_process_enable[rank_ind])
             self.send_interface.send_channel_selection(
                 rank, all_encoder_process_enable[rank_ind])
 
@@ -1313,6 +1320,7 @@ class MainSimulatorManager(rt_logging.LoggingClass):
 
         self.class_log.debug(
             "Received decoding ntrode list {:}.".format(trode_list))
+        print('start handel ntrode list')
 
         # self._ripple_ranks_startup(trode_list)
         self._encoder_rank_startup(trode_list)
