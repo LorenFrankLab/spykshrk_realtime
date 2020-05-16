@@ -1,4 +1,5 @@
 # daily anlaysis functions for real-time experiment
+import numpy as np
 
 # function to cacluate non-local error (in fraction of time bins)
 def non_local_error(posterior_with_error,arm_coords):
@@ -94,15 +95,15 @@ def local_error(posterior_with_error,arm_coords):
     print(posterior_with_error.shape)
     	
 	# fraction of each arm dataframe where max position is local
-    box_local = box[(box['posterior_max']>=binned_arm_coords[0][0]) & (box['posterior_max']<=binned_arm_coords[0][1])]
-    arm1_local = arm1[(arm1['posterior_max']>=binned_arm_coords[1][0]) & (arm1['posterior_max']<=binned_arm_coords[1][1])]
-    arm2_local = arm2[(arm2['posterior_max']>=binned_arm_coords[2][0]) & (arm2['posterior_max']<=binned_arm_coords[2][1])]
-    arm3_local = arm3[(arm3['posterior_max']>=binned_arm_coords[3][0]) & (arm3['posterior_max']<=binned_arm_coords[3][1])]
-    arm4_local = arm4[(arm4['posterior_max']>=binned_arm_coords[4][0]) & (arm4['posterior_max']<=binned_arm_coords[4][1])]
-    arm5_local = arm5[(arm5['posterior_max']>=binned_arm_coords[5][0]) & (arm5['posterior_max']<=binned_arm_coords[5][1])]
-    arm6_local = arm6[(arm6['posterior_max']>=binned_arm_coords[6][0]) & (arm6['posterior_max']<=binned_arm_coords[6][1])]
-    arm7_local = arm7[(arm7['posterior_max']>=binned_arm_coords[7][0]) & (arm7['posterior_max']<=binned_arm_coords[7][1])]
-    arm8_local = arm8[(arm8['posterior_max']>=binned_arm_coords[8][0]) & (arm8['posterior_max']<=binned_arm_coords[8][1])]
+    box_local = box[(box['posterior_max']>=arm_coords[0][0]) & (box['posterior_max']<=arm_coords[0][1])]
+    arm1_local = arm1[(arm1['posterior_max']>=arm_coords[1][0]) & (arm1['posterior_max']<=arm_coords[1][1])]
+    arm2_local = arm2[(arm2['posterior_max']>=arm_coords[2][0]) & (arm2['posterior_max']<=arm_coords[2][1])]
+    arm3_local = arm3[(arm3['posterior_max']>=arm_coords[3][0]) & (arm3['posterior_max']<=arm_coords[3][1])]
+    arm4_local = arm4[(arm4['posterior_max']>=arm_coords[4][0]) & (arm4['posterior_max']<=arm_coords[4][1])]
+    arm5_local = arm5[(arm5['posterior_max']>=arm_coords[5][0]) & (arm5['posterior_max']<=arm_coords[5][1])]
+    arm6_local = arm6[(arm6['posterior_max']>=arm_coords[6][0]) & (arm6['posterior_max']<=arm_coords[6][1])]
+    arm7_local = arm7[(arm7['posterior_max']>=arm_coords[7][0]) & (arm7['posterior_max']<=arm_coords[7][1])]
+    arm8_local = arm8[(arm8['posterior_max']>=arm_coords[8][0]) & (arm8['posterior_max']<=arm_coords[8][1])]
 
     box_local_error = np.median(box_local['error_cm'].values)
     arm1_local_error = np.median(arm1_local['error_cm'].values)
@@ -129,7 +130,8 @@ def local_error(posterior_with_error,arm_coords):
                       np.around(arm8_local.shape[0]/arm8.shape[0],decimals=2))
     print('fraction each arm local:',local_bin_frac)
     #weighted average for each arm
-    local_total_bins = (arm1_local.shape[0]+arm2_local.shape[0]+
+    # add 1 here becuase of divide by 0 error
+    local_total_bins = (1 + arm1_local.shape[0]+arm2_local.shape[0]+
                         arm3_local.shape[0]+
                         arm4_local.shape[0]+arm5_local.shape[0]+
                         arm6_local.shape[0]+

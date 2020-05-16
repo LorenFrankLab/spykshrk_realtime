@@ -48,11 +48,12 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     # define data source filepaths
     path_base = path_base
     raw_directory = path_base + rat_name + '/filterframework/'
-    linearization_path = raw_directory + 'decoding/'   # need to update paths now that sungod_util doesn't add rat folder - add it here instead! 
+    #linearization_path = raw_directory + 'decoding/'   # need to update paths now that sungod_util doesn't add rat folder - add it here instead! 
+    linearization_path = path_out
     day_ep = str(day) + '_' + str(epoch)
 
-    tetlist = None
-    #tetlist = [4]
+    #tetlist = None
+    tetlist = [4]
 
     if tetlist is None:
         animalinfo  = {rat_name: Animal(directory=raw_directory, short_name=rat_name)}
@@ -85,8 +86,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     print('original length: '+str(marks.shape[0]))
 
     # fill in any deadchans with zeros
-    specific_tetinfo = tetinfo.query('tetrode_number==@tetrodes')  # pull the tetinfo for tets in list 
-    marks = datasrc.fill_dead_chans(marks, specific_tetinfo)
+    #specific_tetinfo = tetinfo.query('tetrode_number==@tetrodes')  # pull the tetinfo for tets in list 
+    #marks = datasrc.fill_dead_chans(marks, specific_tetinfo)
 
     # OPTIONAL: to reduce mark number, can filter by size. Current detection threshold is 100  
     marks = trodes2SS.threshold_marks(marks, maxthresh=2000,minthresh=300)
@@ -110,8 +111,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
 
     # Position linearization
     # if linearization exists, load it. if not, run the linearization.
-    lin_output1 = os.path.join(linearization_path + rat_name + '_' + day_ep + '_' + 'distance.npy')
-    lin_output2 = os.path.join(linearization_path + rat_name + '_' + day_ep + '_' + 'track_segments.npy')
+    lin_output1 = os.path.join(linearization_path + rat_name + '_' + day_ep + '_' + 'linearized_distance.npy')
+    lin_output2 = os.path.join(linearization_path + rat_name + '_' + day_ep + '_' + 'linearized_track_segments.npy')
     print('linearization file 1: ',lin_output1)
     if os.path.exists(lin_output1) == False:
         print('Linearization result doesnt exist. Doing linearization calculation!')
@@ -251,27 +252,34 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     posterior_file_name_h5 = os.path.join(path_out, rat_name + '_' + str(day) + '_' + str(epoch) + 
                                           '_shuffle_' + str(shift_amount) + '_posteriors' + suffix + '.h5')
 
-    post1 = posteriors.apply_time_event(rips, event_mask_name='ripple_grp')
-    post2 = post1.reset_index()
-    post3 = trodes2SS.convert_dan_posterior_to_xarray(post2, tetrodes, 
-                                            velocity_thresh_for_enc_dec, encode_settings, decode_settings, sungod_trans_mat, order, shift_amount)
-    post3.to_netcdf(posterior_file_name)
+    post1 = posteriors.copy()
+    post2 = post1.apply_time_event(rips, event_mask_name='ripple_grp')
+    post3 = post2.reset_index()
+    post4 = trodes2SS.convert_dan_posterior_to_xarray(post3, tetrodes, velocity_thresh_for_enc_dec, 
+                                                      encode_settings, decode_settings, sungod_trans_mat, 
+                                                      order, shift_amount)
+    post4.to_netcdf(posterior_file_name)
     print('Saved netcdf posteriors to '+posterior_file_name)
 
     # to export linearized position to MatLab: again convert to xarray and then save as netcdf
 
-    position_file_name = os.path.join(path_out, rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_linearposition_v2'+suffix+'.nc')
+    position_file_name = os.path.join(path_out, rat_name + '_' + str(day) + '_' + 
+                                      str(epoch) + '_shuffle_' + str(shift_amount) + 
+                                      '_linearposition_v2'+suffix+'.nc')
 
-    linearized_pos1 = binned_linear_pos.apply_time_event(rips, event_mask_name='ripple_grp')
+    linearized_pos0 = binned_linear_pos.copy()
+    linearized_pos1 = linearized_pos0.apply_time_event(rips, event_mask_name='ripple_grp')
     linearized_pos2 = linearized_pos1.reset_index()
     linearized_pos3 = linearized_pos2.to_xarray()
     linearized_pos3.to_netcdf(position_file_name)
     print('Saved netcdf linearized position to '+position_file_name)
 
     # save offline decoder result as hdf5 file
-    post_to_save = posteriors.apply_time_event(rips, event_mask_name='ripple_grp')
-    post_to_save._to_hdf_store(posterior_file_name_h5,'/analysis', 
-                               'decode/clusterless/offline/posterior', 'sungod_trans_mat')
+    post_to_save = posteriors.copy()
+    post_to_save1 = post_to_save.apply_time_event(rips, event_mask_name='ripple_grp')
+    post_to_save1._to_hdf_store(posterior_file_name_h5,'/analysis', 
+                               'decode/clusterless/offline/posterior', 
+                               'sungod_trans_mat', overwrite=True)
     print('Saved posteriors to '+posterior_file_name_h5)
 
     #cell 16
@@ -319,7 +327,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     post_error_plot_off = posterior_with_pos_vel.copy()
 
     # remote error
-
+    print('calulating offline decoding error')
     # only calculate error during movement
     error_off = post_error_plot_off.copy()
     error_off = error_off[error_off['linvel_flat']>velthresh]
@@ -347,6 +355,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     stim_message = store_rt['rec_12']
     #timing1 = store_rt['rec_100']
 
+    print('loaded realtime rec file:',realtime_rec)
+
     # calculate max for real-time posteriors
     post_error = decoder_data.copy()
 
@@ -362,7 +372,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
 
     #now need to add back columns 'timestamp','real_pos_time','real_pos'.'spike_count'
     post_error['timestamp'] = decoder_data['bin_timestamp']
-    post_error['real_vel'] = decoder_data['velocity']
+    post_error['linvel_flat'] = decoder_data['velocity']
     post_error['linpos_flat'] = decoder_data['real_pos']
     post_error['spike_count'] = decoder_data['spike_count']
     #this is the error column in centimeters
@@ -372,6 +382,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     binned_arm_coords_realtime = [[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]]
 
     # real-time remote error
+    print('calulating real-time decoding error')
     error_realtime = post_error.copy()
     error_realtime = error_realtime[error_realtime['linvel_flat']>5]
     print(error_realtime.shape)
@@ -507,8 +518,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
             max_arm = merged_to_plot[title_index:title_index+1]['posterior_max_arm'].values
             ripple_num = merged_to_plot[title_index:title_index+1]['lockout_num'].values
             message_delay = np.around(merged_to_plot[title_index:title_index+1]['delay'].values,decimals=0)
-            offline_max = non_matching[(non_matching['realtime_rip']>=counter) & 
-                                       (non_matching['realtime_rip']<counter+1)]['off_max_arm'].values
+            #offline_max = non_matching[(non_matching['realtime_rip']>=counter) & 
+            #                           (non_matching['realtime_rip']<counter+1)]['off_max_arm'].values
 
             # fill in current row of posterior sum array - seems to work
             realtime_posterior_sum_all[counter,0] = ripple_num
@@ -516,7 +527,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
             realtime_posterior_sum_all[counter,2] = shortcut_message_to_plot.shape[0]-1
             realtime_posterior_sum_all[counter,3] = message_delay
         
-    # convert offline_posterior_sum_all array to pandas
+    # convert realtime_post_sum_summary array to pandas
     realtime_post_sum_summary = pd.DataFrame(data=realtime_posterior_sum_all,columns=('realtime_rip','rt_max_arm',
                                                                                       'rt_two_messages','rt_delay'))
     print('realtime replay summary shape:',realtime_post_sum_summary.shape)
@@ -531,7 +542,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
     summarize_all_rips_offline = True
 
     # add ripple to posteriors dataframe
-    posteriors2 = posteriors.apply_time_event(rips, event_mask_name='ripple_grp')    
+    posteriors1 = posteriors.copy()
+    posteriors2 = posteriors1.apply_time_event(rips, event_mask_name='ripple_grp')    
     posterior_offline = posteriors2.reset_index()
     offline_pos = binned_linear_pos.reset_index()
     merged_off_post_pos = pd.merge_asof(posterior_offline,offline_pos,on='timestamp',direction='nearest')
@@ -542,7 +554,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
 
     # updated for new matching_offline_rips merge timestamp_x -> timestamp_y
     # for some reason, final offline rip timestamp is after the decoder has ended - odd
-    for index, rip_timestamp in enumerate(matching_offline_rips['timestamp_y'][:-1]):
+    for index, rip_timestamp in enumerate(matching_offline_rips['timestamp_y'][0:940]):
         posterior_sum_array = np.zeros((sliding_window,9))
         short_ripple = False
         # to plot all ripples
@@ -555,6 +567,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, realtime_rec,
             realtime_ripple_num = matching_offline_rips['lockout_num'][index:index+1].values
             ripple_num_index = int(len(posterior_to_plot)*0.55)
             ripple_num = posterior_to_plot[ripple_num_index:ripple_num_index+1]['ripple_grp'].values
+            if index > 920:
+                print(index, rip_timestamp)
         
             # calculate posterior sum during ripple
             # we need to only take out the time when ripple_grp matches ripple_grp at the middle of the plotting bin
@@ -718,4 +732,5 @@ if __name__ == '__main__':
     parser.add_argument('-o', action='store', dest='path_out', help='Path to output')
     parser.add_argument('-r', action='store', dest='realtime_rec', help='Real-time rec filename')    
     results = parser.parse_args()
+    main(results.path_base,results.rat_name,results.day,results.epoch,results.shift_amt,results.path_out,results.realtime_rec)
 
