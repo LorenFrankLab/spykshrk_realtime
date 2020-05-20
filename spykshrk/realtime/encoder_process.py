@@ -157,8 +157,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.pos_interface = pos_interface
 
         #initialize velocity calc and linear position assignment functions
-        self.velCalc = VelocityCalculator()
-        self.linPosAssign = LinearPositionAssignment()
+        self.velCalc = VelocityCalculator(self.config)
+        self.linPosAssign = LinearPositionAssignment(self.config)
 
         kernel = RST.kernel_param(mean=config['encoder']['mark_kernel']['mean'],
                                   stddev=config['encoder']['mark_kernel']['std'],

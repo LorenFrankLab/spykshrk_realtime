@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "gus_1107_r2_19tet_20lfp_5_5",
+        "prefix": "gus_1107_r2_19tet_20lfp_5_18_whole",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -30,12 +30,15 @@
     "ripple_conditioning": {
         "session_type": "run",
         "posterior_sum_threshold": 0.5,
+        "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
         "post_sum_sliding_window": 11,
-        "ripple_detect_velocity": 5,
+        "ripple_detect_velocity": 4,
         "spike_count_window_sec": 300,
         "previous_spike_count_avg": 1.419,
-        "previous_spike_count_std": 1.125
+        "previous_spike_count_std": 1.125,
+        "replay_target_arm": 1,
+        "condition_rip_thresh": 100
     },
 
     "ripple": {
@@ -43,18 +46,18 @@
             "rip_coeff1": 1.2,
             "rip_coeff2": 0.2,
             "ripple_threshold": 4,
-            "samp_divisor": 450000,
+            "baseline_window_timestamp": 450000,
             "n_above_thresh": 6,
-            "lockout_time": 1500,
-            "posterior_lockout_time": 1000,
-            "ripple_conditioning_lockout_time": 1000,
+            "lockout_time": 6000,
+            "posterior_lockout_time": 0,
+            "ripple_conditioning_lockout_time": 0,
             "detect_no_ripples": false,
-            "detect_no_ripple_time": 60000,
+            "detect_no_ripple_time": 0,
             "dio_gate": false,
             "dio_gate_port": -1,
             "enabled": true,
             "use_custom_baseline": true,
-            "update_custom_baseline": true
+            "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
             " 8 ": 6.36 , 
@@ -123,7 +126,7 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 5,
+        "vel": 4,
         "spk_amp": 150,
         "dead_channels": {
             "1": 3,
@@ -141,10 +144,10 @@
     },
 
     "pp_decoder": {
+        "number_arms": 8,
         "bin_size": 150,
         "trans_mat_uniform_gain": 0.001,
-        "trans_mat_smoother_std": 3,
-        "replay_target_arm": 0
+        "trans_mat_smoother_std": 3
     },
 
     "trodes_network": {

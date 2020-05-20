@@ -8,7 +8,7 @@ from scipy.ndimage.interpolation import shift
 
 import spykshrk.realtime.realtime_logging as rt_logging
 from mpi4py import MPI
-from spykshrk.franklab.pp_decoder.util import apply_no_anim_boundary
+#from spykshrk.franklab.pp_decoder.util import apply_no_anim_boundary
 from spykshrk.realtime import (binary_record, datatypes, encoder_process,
                                main_process, realtime_base)
 #from spykshrk.realtime import realtime_logging as rt_logging
@@ -192,6 +192,8 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         #self.uniform_gain = uniform_gain
         self.uniform_gain = self.config['pp_decoder']['trans_mat_uniform_gain']
 
+        # get number outer arms from config
+        self.number_arms = self.config['pp_decoder']['number_arms']
         self.ntrode_list = []
         self.ntrode_list_array = []
 
@@ -209,15 +211,9 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior = np.ones(self.pos_bins)
         self.prev_posterior = np.ones(self.pos_bins)
         self.firing_rate = {}
+        # not using Dan's transition matrix
         # self.transition_mat = PointProcessDecoder._create_transition_matrix(self.pos_delta,
-        #                                                                    self.pos_bins,
-        #                                                                    self.arm_coor,
-        #                                                                    self.uniform_gain)
-
-        # create sungod transition matrix - should make transition matrix type an option in the config file and specify it there
-        print(self.uniform_gain)
-        self.transition_mat = PointProcessDecoder._sungod_transition_matrix(
-            self.uniform_gain)
+        #                                             self.pos_bins,self.arm_coor,self.uniform_gain)
 
         self.current_spike_count = 0
         self.spike_count_next = 0
@@ -231,12 +227,22 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior_sum_time_bin = np.zeros((self.post_sum_bin_length, 9))
         self.posterior_sum_result = np.zeros((1, 9))
 
-        self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+        # make arm_coords conditional on number of arms
+        if self.number_arms == 8:
+            self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
                                    77, 88], [93, 104], [109, 120], [125, 136]])
-        # 4 arm version
-        #arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        elif self.number_arms == 4:
+            self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        elif self.number_arms == 2:
+            self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+        
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins_1 = np.arange(0, self.max_pos, 1)
+
+        # create sungod transition matrix
+        self.transition_mat = PointProcessDecoder._sungod_transition_matrix(self,self.uniform_gain,self.arm_coords,
+                                                                            self.max_pos,self.pos_bins_1,
+                                                                            self.number_arms)
 
     @staticmethod
     def _create_transition_matrix(pos_delta, num_bins, arm_coor, uniform_gain=0.01):
@@ -275,43 +281,58 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         return transition_mat
 
     @staticmethod
-    def _sungod_transition_matrix(uniform_gain):
+    def _sungod_transition_matrix(self,uniform_gain,arm_coords,max_pos,pos_bins_1,number_arms):
         # updated for 2 pixels 8-14-19
         # arm_coords updated for 8 pixels 8-15-19
         # NOTE: by rounding up for binning position of outer arms, we get no position in first bin of each arm
         # we could just move the first position here in arm coords and then each arm will start 1 bin higher
         # based on looking at counts from position this should work, so each arm is 11 units
 
+        # make all these steps conditional on config number of arms
+
         # 8 arm version
-        arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
-                              77, 88], [93, 104], [109, 120], [125, 136]])
+        # see if we can use self.arm_coords instead and self.max_pos and self.pos_bins_1
+
+        #arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+        #                      77, 88], [93, 104], [109, 120], [125, 136]])
         # 4 arm version
         #arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
-        max_pos = arm_coords[-1][-1] + 1
-        pos_bins = np.arange(0, max_pos, 1)
+        #max_pos = arm_coords[-1][-1] + 1
+        #pos_bins = np.arange(0, max_pos, 1)
 
         uniform_gain = uniform_gain
+        arm_coords = arm_coords
+        max_pos = max_pos
+        pos_bins = pos_bins_1
+        number_arms = number_arms
 
         from scipy.sparse import diags
         n = len(pos_bins)
         transition_mat = np.zeros([n, n])
-        k = np.array([(1 / 3) * np.ones(n - 1), (1 / 3) *
+        k = np.array([(1/3) * np.ones(n - 1), (1/3) *
                       np.ones(n), (1 / 3) * np.ones(n - 1)])
         offset = [-1, 0, 1]
         transition_mat = diags(k, offset).toarray()
         box_end_bin = arm_coords[0, 1]
 
-        # 8 arm version
-        for x in arm_coords[:, 0]:
-            transition_mat[int(x), int(x)] = (5 / 9)
-            transition_mat[box_end_bin, int(x)] = (1 / 9)
-            transition_mat[int(x), box_end_bin] = (1 / 9)
+        if number_arms == 8:
+            for x in arm_coords[:, 0]:
+                transition_mat[int(x), int(x)] = (5/9)
+                transition_mat[box_end_bin, int(x)] = (1/9)
+                transition_mat[int(x), box_end_bin] = (1/9)
 
-        # 4 arm version
-        # for x in arm_coords[:,0]:
-        #    transition_mat[int(x),int(x)] = (7/15)
-        #    transition_mat[box_end_bin,int(x)] = (1/5)
-        #    transition_mat[int(x),box_end_bin] = (1/5)
+        elif number_arms == 4:
+            for x in arm_coords[:,0]:
+                transition_mat[int(x),int(x)] = (7/15)
+                transition_mat[box_end_bin,int(x)] = (1/5)
+                transition_mat[int(x),box_end_bin] = (1/5)
+
+        elif number_arms == 2:
+            for x in arm_coords[:,0]:
+                transition_mat[int(x),int(x)] = (1/3)
+                transition_mat[box_end_bin,int(x)] = (1/3)
+                transition_mat[int(x),box_end_bin] = (1/3)
+
 
         for y in arm_coords[:, 1]:
             transition_mat[int(y), int(y)] = (2 / 3)
@@ -321,15 +342,20 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         transition_mat[box_end_bin, box_end_bin] = 0
         transition_mat[0, 0] = (2 / 3)
 
-        # 8 arm version
-        transition_mat[box_end_bin - 1, box_end_bin - 1] = (5 / 9)
-        transition_mat[box_end_bin - 1, box_end_bin] = (1 / 9)
-        transition_mat[box_end_bin, box_end_bin - 1] = (1 / 9)
+        if number_arms == 8:
+            transition_mat[box_end_bin - 1, box_end_bin - 1] = (5/9)
+            transition_mat[box_end_bin - 1, box_end_bin] = (1/9)
+            transition_mat[box_end_bin, box_end_bin - 1] = (1/9)
 
-        # 4 arm version
-        #transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
-        #transition_mat[box_end_bin-1,box_end_bin] = (1/5)
-        #transition_mat[box_end_bin, box_end_bin-1] = (1/5)
+        elif number_arms == 4:
+            transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
+            transition_mat[box_end_bin-1,box_end_bin] = (1/5)
+            transition_mat[box_end_bin, box_end_bin-1] = (1/5)
+
+        elif number_arms == 2:
+            transition_mat[box_end_bin-1, box_end_bin-1] = (1/3)
+            transition_mat[box_end_bin-1,box_end_bin] = (1/3)
+            transition_mat[box_end_bin, box_end_bin-1] = (1/3)
 
         # uniform offset (gain, currently 0.0001)
         # 9-1-19 this is now taken from config file
@@ -340,7 +366,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         transition_mat = transition_mat + uniform_dist
 
         # apply no animal boundary - make gaps between arms
-        transition_mat = apply_no_anim_boundary(
+        transition_mat = self.apply_no_anim_boundary(
             pos_bins, arm_coords, transition_mat)
 
         # to smooth: take the transition matrix to a power
@@ -627,9 +653,13 @@ class PointProcessDecoder(rt_logging.LoggingClass):
 
     def calculate_posterior_arm_sum(self, posterior, ripple_time_bin):
 
+        # hmmmm we have defined arm_coords many places - try to just define it once
+        # this needs to take into account number of arms
+
         # 8 arm version - i think this should match the transition matrix (before was all values-1, not sure why)
-        arm_coords_rt = [[0, 8], [13, 24], [29, 40], [45, 56], [
-            61, 72], [77, 88], [93, 104], [109, 120], [125, 136]]
+        #arm_coords_rt = [[0, 8], [13, 24], [29, 40], [45, 56], [
+        #    61, 72], [77, 88], [93, 104], [109, 120], [125, 136]]
+        # we should be able to use self.arm_coords
 
         # 4 arm version
         #arm_coords_rt = [[0,8],[13,24],[29,40],[45,56],[61,72]]
@@ -646,9 +676,8 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior_sum_result = np.zeros((1, 9))
         #print('zeros shape: ',self.posterior_sum_result)
 
-        for region_ind, (start_ind, stop_ind) in enumerate(arm_coords_rt):
-            self.posterior_sum_result[0,
-                                      region_ind] = posterior[start_ind:stop_ind + 1].sum()
+        for region_ind, (start_ind, stop_ind) in enumerate(self.arm_coords):
+            self.posterior_sum_result[0,region_ind] = posterior[start_ind:stop_ind + 1].sum()
             # print(self.posterior_sum_result)
             #print('whole posterior sum',posterior.sum())
         # posterior sum vector seems good - always adds to 1
@@ -714,8 +743,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.smooth_x = 0
         self.smooth_y = 0
         self.smooth_vel = 0
-        self.velCalc = VelocityCalculator()
-        self.linPosAssign = LinearPositionAssignment()
+        self.velCalc = VelocityCalculator(self.config)
+        self.linPosAssign = LinearPositionAssignment(self.config)
 
         # Send binary record register message
         # self.mpi_send.send_record_register_messages(self.get_record_register_messages())
@@ -738,7 +767,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.ripple_thresh_decoder = False
         self.ripple_time_bin = 0
         self.no_ripple_time_bin = 0
-        self.replay_target_arm = self.config['pp_decoder']['replay_target_arm']
+        self.replay_target_arm = self.config['ripple_conditioning']['replay_target_arm']
         self.posterior_arm_sum = np.zeros((1, 9))
         self.num_above = 0
         self.ripple_number = 0
@@ -924,6 +953,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(
                     posterior, self.ripple_time_bin)
                 #self.posterior_arm_sum = np.zeros((1,9))
+
+                # check arm number in config file and then zero-out empty arms
+                # note this should not be necessary 
 
                 # if spike_dec_msg is not None:
                 #    print('posterior arm sum, spike loop',np.around(self.posterior_arm_sum,decimals=2),self.spike_count)

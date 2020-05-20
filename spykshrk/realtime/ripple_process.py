@@ -19,14 +19,14 @@ from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream, 
 
 
 class RippleParameterMessage(rt_logging.PrintableMessage):
-    def __init__(self, rip_coeff1=1.2, rip_coeff2=0.2, ripple_threshold=5, samp_divisor=10000, n_above_thresh=1,
+    def __init__(self, rip_coeff1=1.2, rip_coeff2=0.2, ripple_threshold=5, baseline_window_timestamp=10000, n_above_thresh=1,
                  lockout_time=7500, ripple_conditioning_lockout_time = 7500, posterior_lockout_time = 7500,
                  detect_no_ripple_time=60000, dio_gate_port=None, detect_no_ripples=False,
                  dio_gate=False, enabled=False, use_custom_baseline=False, update_custom_baseline=False):
         self.rip_coeff1 = rip_coeff1
         self.rip_coeff2 = rip_coeff2
         self.ripple_threshold = ripple_threshold
-        self.samp_divisor = samp_divisor
+        self.baseline_window_timestamp = baseline_window_timestamp
         self.n_above_thresh = n_above_thresh
         self.lockout_time = lockout_time
         self.ripple_conditioning_lockout_time = ripple_conditioning_lockout_time
@@ -180,7 +180,7 @@ class RippleFilter(rt_logging.LoggingClass):
         self.lfp_display_counter = 0
         self.config = config
 
-        self.conditioning_ripple_threshold = self.config['ripple']['RippleParameterMessage']['ripple_threshold']
+        self.conditioning_ripple_threshold = self.config['ripple_conditioning']['condition_rip_thresh']
         self.condition_thresh_crossed = False
 
         self.session_type = self.config['ripple_conditioning']['session_type']
@@ -320,8 +320,9 @@ class RippleFilter(rt_logging.LoggingClass):
                 self.ripple_std = self.custom_baseline_std
                 print('run, initial LFP mean:',self.ripple_mean,'std:',self.ripple_std)
             # calculate and display lfp baseline
-            self.ripple_mean += (y - self.ripple_mean) / self.param.samp_divisor
-            self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.samp_divisor
+            # comment out to prevent updating
+            #self.ripple_mean += (y - self.ripple_mean) / self.param.baseline_window_timestamp
+            #self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.baseline_window_timestamp
             self.lfp_display_counter += 1
             # display every 1 sec during baseline, every 10 sec during run session
             # only display from process rank 3
@@ -358,8 +359,8 @@ class RippleFilter(rt_logging.LoggingClass):
                           'content ripple threshold = ',self.param.ripple_threshold)
 
             if not self.stim_enabled:
-                self.ripple_mean += (y - self.ripple_mean) / self.param.samp_divisor
-                self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.samp_divisor
+                self.ripple_mean += (y - self.ripple_mean) / self.param.baseline_window_timestamp
+                self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.baseline_window_timestamp
                 if not self.param.use_custom_baseline:  # only update the threshold if we're not using a custom baseline
                     self.current_thresh = self.ripple_mean + self.ripple_std * self.param.ripple_threshold
                     # print('ntrode', crf.nTrodeId, 'mean', crf.rippleMean)
