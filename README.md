@@ -1,6 +1,3 @@
-# Notice
-This is Josh's branch of spykshrk. Currently it is difficult to know which files are necessary, as some may be supporting legacy hardware, while others may not even be used. Therefore, we will create a new package directory while leaving the old system intact. The goal is to improve the user friendliness, as well as the speed to minimize the number of dropped spikes.
-
 # SPYKSHRK Realtime High Performance Computing for Neuroscience
 
 The goal of this project is to develop a realtime framework for closed loop electrophysiology neuroscience experiments with algorithms accelerated by a cluster. The first version of the framework is designed around rodent navigation tasks with simultaneous tetrode recordings in hippocampal CA1/CA3. Development is broken up into two phases:
@@ -19,3 +16,6 @@ As a demonstration of how to use the system, it will be designed around specific
 1. "Simulation Mode" - simulates experimental hardware for offline testing of system/algorithms.
 2. Instrumentation to evaluate system performance, recording program state and timing.
 3. Post-simulation analyses tools to aid in the design, developement and evaluation of algorithms.
+
+
+
