@@ -107,6 +107,17 @@ class RSTKernelEncoder:
         #print('bin center: ',param.pos_hist_struct.pos_bin_center)
         #print('bin delta: ',param.pos_hist_struct.pos_bin_delta)
 
+        ############################################################################
+        # for KDE computation
+        N = 10000
+        sigma = self.config['encoder']['mark_kernel']['std']
+        self.marks = np.zeros((N, 4), dtype=np.float32)
+        self.positions = np.zeros(N, dtype=np.float32)
+        self.mark_idx = 0
+        self.k1 = 1 / (np.sqrt(2*np.pi) * sigma)
+        self.k2 = -0.5 / (sigma**2)
+        ############################################################################
+
     def apply_no_anim_boundary(self, x_bins, arm_coor, image, fill=0):
         # from util.py script in offline decoder folder
 
@@ -148,14 +159,26 @@ class RSTKernelEncoder:
             print('number of position entries encoder: ',self.occupancy_counter)      
 
     def new_mark(self, mark, new_cov=None):
+        ############################################################################
         # update new covariate if specified, otherwise use previous covariate state
         # it doesnt look this is currently being used
-        if new_cov:
-            self.update_covariate(new_cov)
+        # if new_cov:
+        #     self.update_covariate(new_cov)
 
-        self.tree.insert_rec(mark[0], mark[1], mark[2],
-                             mark[3], self.covariate)
+        # self.tree.insert_rec(mark[0], mark[1], mark[2],
+        #                      mark[3], self.covariate)
         #print('position in new mark: ',self.covariate)
+        ###########################################################################
+
+        ############################################################################
+        if self.mark_idx == self.marks.shape[0]:
+            self.marks = np.vstack((self.marks, np.zeros_like(self.marks)))
+            self.positions = np.hstack((self.positions, np.zeros_like(self.positions)))
+
+        self.marks[self.mark_idx] = mark
+        self.positions[self.mark_idx] = self.covariate
+        self.mark_idx += 1
+        ############################################################################
 
     # MEC 7-10-19 try going from 5 to 3, because 3 stdev in 4D space will still get 95% of the points
     def query_mark(self, mark):
@@ -181,7 +204,19 @@ class RSTKernelEncoder:
         #query_weights = np.zeros((1,137))+0.1
         #query_positions = np.zeros((1,137))+0.5
 
-        query_weights, query_positions = self.query_mark(mark)
+        ############################################################################
+        # query_weights, query_positions = self.query_mark(mark)
+        ############################################################################
+
+        ############################################################################
+        # evaluate Gaussian kernel on distance in mark space
+        squared_distance = np.sum(
+            np.square(self.marks[:self.mark_idx - 1] - mark),
+            axis=1)
+        query_weights = self.k1 * np.exp(squared_distance * self.k2)
+        query_positions = self.positions[:self.mark_idx - 1]
+        ############################################################################
+
         query_hist, query_hist_edges = np.histogram(
             a=query_positions, bins=self.param.pos_hist_struct.pos_bin_edges,
             weights=query_weights, normed=False)
