@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "remy_21_2_19tet_5_18_trodes1and2",
+        "prefix": "remy_20_2_19tet_4_30_20lfp_base",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -28,17 +28,12 @@
     },
 
     "ripple_conditioning": {
-        "session_type": "run",
+        "display_baseline": false,
         "posterior_sum_threshold": 0.5,
-        "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
+        "ripple_detection_shift": 2100,
         "post_sum_sliding_window": 11,
-        "ripple_detect_velocity": 4,
-        "spike_count_window_sec": 300,
-        "previous_spike_count_avg": 2.087,
-        "previous_spike_count_std": 1.331,
-        "replay_target_arm": 1,
-        "condition_rip_thresh": 100
+        "ripple_detect_velocity": 5
     },
 
     "ripple": {
@@ -46,13 +41,13 @@
             "rip_coeff1": 1.2,
             "rip_coeff2": 0.2,
             "ripple_threshold": 4,
-            "baseline_window_timestamp": 450000,
+            "samp_divisor": 10000,
             "n_above_thresh": 6,
-            "lockout_time": 6000,
-            "posterior_lockout_time": 0,
-            "ripple_conditioning_lockout_time": 0,
+            "lockout_time": 1500,
+            "posterior_lockout_time": 1000,
+            "ripple_conditioning_lockout_time": 1000,
             "detect_no_ripples": false,
-            "detect_no_ripple_time": 0,
+            "detect_no_ripple_time": 60000,
             "dio_gate": false,
             "dio_gate_port": -1,
             "enabled": true,
@@ -60,50 +55,48 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
-            " 13 ": 10.37 , 
-            " 29 ": 6.29 , 
-            " 26 ": 9.48 , 
-            " 17 ": 6.83 , 
-            " 9 ": 10.72 , 
-            " 19 ": 6.82 , 
-            " 22 ": 7.73 , 
-            " 10 ": 8.15 , 
-            " 4 ": 8.3 , 
-            " 2 ": 16.88 , 
-            " 6 ": 13.52 , 
-            " 11 ": 6.54 , 
-            " 15 ": 6.04 , 
-            " 30 ": 13.86 , 
-            " 12 ": 9.51 , 
-            " 23 ": 14.82 , 
-            " 14 ": 6.1 , 
-            " 24 ": 12.6 , 
-            " 21 ": 10.7 , 
-            " 20 ": 8.36 
-
+            "4": 8.01,
+            "6": 15.04,
+            "9": 10.41,
+            "10": 8.1,
+            "13": 10.45,
+            "17": 6.07,
+            "19": 6.75,
+            "22": 8.07,
+            "26": 9.04,
+            "29": 6.17,
+            "2": 22.02,
+            "11": 6.67,
+            "12": 8.85,
+            "14": 5.74,
+            "15": 6.02,
+            "20": 7.96,
+            "21": 10.37,
+            "23": 14.36,
+            "24": 12.31,
+            "30": 12.07
         },
         "CustomRippleBaselineStdMessage": {
-            " 13 ": 6.96 ,
-            " 29 ": 4.01 ,
-            " 26 ": 6.24 ,
-            " 17 ": 4.29 ,
-            " 9 ": 6.86 ,
-            " 19 ": 4.43 ,
-            " 22 ": 4.96 ,
-            " 10 ": 5.3 ,
-            " 4 ": 5.34 ,
-            " 2 ": 10.85 ,
-            " 6 ": 8.61 ,
-            " 11 ": 4.17 ,
-            " 15 ": 3.9 ,
-            " 30 ": 9.27 ,
-            " 12 ": 6.26 ,
-            " 23 ": 9.48 ,
-            " 14 ": 3.98 ,
-            " 24 ": 8.09 ,
-            " 21 ": 7.26 ,
-            " 20 ": 5.59 
-
+            "4": 4.84,
+            "6": 9.64,
+            "9": 6.57,
+            "10": 5.07,
+            "13": 6.68,
+            "17": 3.78,
+            "19": 4.15,
+            "22": 4.95,
+            "26": 5.7,
+            "29": 3.79,
+            "2": 14.63,
+            "11": 4.13,
+            "12": 5.49,
+            "14": 3.56,
+            "15": 3.83,
+            "20": 5.01,
+            "21": 6.66,
+            "23": 9.17,
+            "24": 7.73,
+            "30": 7.67
         }
     },
 
@@ -127,7 +120,7 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 4,
+        "vel": 5,
         "spk_amp": 150,
         "dead_channels": {
         },
@@ -156,10 +149,10 @@
     },
 
     "pp_decoder": {
-        "number_arms": 8,
         "bin_size": 150,
         "trans_mat_uniform_gain": 0.001,
-        "trans_mat_smoother_std": 3
+        "trans_mat_smoother_std": 3,
+        "replay_target_arm": 0
     },
 
     "trodes_network": {

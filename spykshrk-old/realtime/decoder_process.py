@@ -1,3 +1,5 @@
+import os
+import fcntl
 import math
 import struct
 
@@ -6,7 +8,7 @@ from scipy.ndimage.interpolation import shift
 
 import spykshrk.realtime.realtime_logging as rt_logging
 from mpi4py import MPI
-from spykshrk.franklab.pp_decoder.util import apply_no_anim_boundary
+#from spykshrk.franklab.pp_decoder.util import apply_no_anim_boundary
 from spykshrk.realtime import (binary_record, datatypes, encoder_process,
                                main_process, realtime_base)
 #from spykshrk.realtime import realtime_logging as rt_logging
@@ -190,6 +192,8 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         #self.uniform_gain = uniform_gain
         self.uniform_gain = self.config['pp_decoder']['trans_mat_uniform_gain']
 
+        # get number outer arms from config
+        self.number_arms = self.config['pp_decoder']['number_arms']
         self.ntrode_list = []
         self.ntrode_list_array = []
 
@@ -207,15 +211,9 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior = np.ones(self.pos_bins)
         self.prev_posterior = np.ones(self.pos_bins)
         self.firing_rate = {}
+        # not using Dan's transition matrix
         # self.transition_mat = PointProcessDecoder._create_transition_matrix(self.pos_delta,
-        #                                                                    self.pos_bins,
-        #                                                                    self.arm_coor,
-        #                                                                    self.uniform_gain)
-
-        # create sungod transition matrix - should make transition matrix type an option in the config file and specify it there
-        print(self.uniform_gain)
-        self.transition_mat = PointProcessDecoder._sungod_transition_matrix(
-            self.uniform_gain)
+        #                                             self.pos_bins,self.arm_coor,self.uniform_gain)
 
         self.current_spike_count = 0
         self.spike_count_next = 0
@@ -229,12 +227,22 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior_sum_time_bin = np.zeros((self.post_sum_bin_length, 9))
         self.posterior_sum_result = np.zeros((1, 9))
 
-        self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+        # make arm_coords conditional on number of arms
+        if self.number_arms == 8:
+            self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
                                    77, 88], [93, 104], [109, 120], [125, 136]])
-        # 4 arm version
-        #arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        elif self.number_arms == 4:
+            self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        elif self.number_arms == 2:
+            self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+        
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins_1 = np.arange(0, self.max_pos, 1)
+
+        # create sungod transition matrix
+        self.transition_mat = PointProcessDecoder._sungod_transition_matrix(self,self.uniform_gain,self.arm_coords,
+                                                                            self.max_pos,self.pos_bins_1,
+                                                                            self.number_arms)
 
     @staticmethod
     def _create_transition_matrix(pos_delta, num_bins, arm_coor, uniform_gain=0.01):
@@ -273,43 +281,58 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         return transition_mat
 
     @staticmethod
-    def _sungod_transition_matrix(uniform_gain):
+    def _sungod_transition_matrix(self,uniform_gain,arm_coords,max_pos,pos_bins_1,number_arms):
         # updated for 2 pixels 8-14-19
         # arm_coords updated for 8 pixels 8-15-19
         # NOTE: by rounding up for binning position of outer arms, we get no position in first bin of each arm
         # we could just move the first position here in arm coords and then each arm will start 1 bin higher
         # based on looking at counts from position this should work, so each arm is 11 units
 
+        # make all these steps conditional on config number of arms
+
         # 8 arm version
-        arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
-                              77, 88], [93, 104], [109, 120], [125, 136]])
+        # see if we can use self.arm_coords instead and self.max_pos and self.pos_bins_1
+
+        #arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+        #                      77, 88], [93, 104], [109, 120], [125, 136]])
         # 4 arm version
         #arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
-        max_pos = arm_coords[-1][-1] + 1
-        pos_bins = np.arange(0, max_pos, 1)
+        #max_pos = arm_coords[-1][-1] + 1
+        #pos_bins = np.arange(0, max_pos, 1)
 
         uniform_gain = uniform_gain
+        arm_coords = arm_coords
+        max_pos = max_pos
+        pos_bins = pos_bins_1
+        number_arms = number_arms
 
         from scipy.sparse import diags
         n = len(pos_bins)
         transition_mat = np.zeros([n, n])
-        k = np.array([(1 / 3) * np.ones(n - 1), (1 / 3) *
+        k = np.array([(1/3) * np.ones(n - 1), (1/3) *
                       np.ones(n), (1 / 3) * np.ones(n - 1)])
         offset = [-1, 0, 1]
         transition_mat = diags(k, offset).toarray()
         box_end_bin = arm_coords[0, 1]
 
-        # 8 arm version
-        for x in arm_coords[:, 0]:
-            transition_mat[int(x), int(x)] = (5 / 9)
-            transition_mat[box_end_bin, int(x)] = (1 / 9)
-            transition_mat[int(x), box_end_bin] = (1 / 9)
+        if number_arms == 8:
+            for x in arm_coords[:, 0]:
+                transition_mat[int(x), int(x)] = (5/9)
+                transition_mat[box_end_bin, int(x)] = (1/9)
+                transition_mat[int(x), box_end_bin] = (1/9)
 
-        # 4 arm version
-        # for x in arm_coords[:,0]:
-        #    transition_mat[int(x),int(x)] = (7/15)
-        #    transition_mat[box_end_bin,int(x)] = (1/5)
-        #    transition_mat[int(x),box_end_bin] = (1/5)
+        elif number_arms == 4:
+            for x in arm_coords[:,0]:
+                transition_mat[int(x),int(x)] = (7/15)
+                transition_mat[box_end_bin,int(x)] = (1/5)
+                transition_mat[int(x),box_end_bin] = (1/5)
+
+        elif number_arms == 2:
+            for x in arm_coords[:,0]:
+                transition_mat[int(x),int(x)] = (1/3)
+                transition_mat[box_end_bin,int(x)] = (1/3)
+                transition_mat[int(x),box_end_bin] = (1/3)
+
 
         for y in arm_coords[:, 1]:
             transition_mat[int(y), int(y)] = (2 / 3)
@@ -319,15 +342,20 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         transition_mat[box_end_bin, box_end_bin] = 0
         transition_mat[0, 0] = (2 / 3)
 
-        # 8 arm version
-        transition_mat[box_end_bin - 1, box_end_bin - 1] = (5 / 9)
-        transition_mat[box_end_bin - 1, box_end_bin] = (1 / 9)
-        transition_mat[box_end_bin, box_end_bin - 1] = (1 / 9)
+        if number_arms == 8:
+            transition_mat[box_end_bin - 1, box_end_bin - 1] = (5/9)
+            transition_mat[box_end_bin - 1, box_end_bin] = (1/9)
+            transition_mat[box_end_bin, box_end_bin - 1] = (1/9)
 
-        # 4 arm version
-        #transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
-        #transition_mat[box_end_bin-1,box_end_bin] = (1/5)
-        #transition_mat[box_end_bin, box_end_bin-1] = (1/5)
+        elif number_arms == 4:
+            transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
+            transition_mat[box_end_bin-1,box_end_bin] = (1/5)
+            transition_mat[box_end_bin, box_end_bin-1] = (1/5)
+
+        elif number_arms == 2:
+            transition_mat[box_end_bin-1, box_end_bin-1] = (1/3)
+            transition_mat[box_end_bin-1,box_end_bin] = (1/3)
+            transition_mat[box_end_bin, box_end_bin-1] = (1/3)
 
         # uniform offset (gain, currently 0.0001)
         # 9-1-19 this is now taken from config file
@@ -338,7 +366,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         transition_mat = transition_mat + uniform_dist
 
         # apply no animal boundary - make gaps between arms
-        transition_mat = apply_no_anim_boundary(
+        transition_mat = self.apply_no_anim_boundary(
             pos_bins, arm_coords, transition_mat)
 
         # to smooth: take the transition matrix to a power
@@ -382,13 +410,14 @@ class PointProcessDecoder(rt_logging.LoggingClass):
             (1, len(self.ntrode_list)), dtype=np.bool)
         self.ntrode_list_array = np.asarray(self.ntrode_list)
 
-    # MEC: need to introduce encoding velocity filter here
+    # MEC: added encoding velocity filter and taskstate
     # firing rate is later used to calculate prob_no_spike
 
     # if you want to do correct prob_no_spike calculation then you
     # need to keep track of tetrodes here each time you add a spike
-    def add_observation(self, spk_elec_grp_id, spk_pos_hist, vel_data):
-        if abs(vel_data) >= self.config['encoder']['vel']:
+    def add_observation(self, spk_elec_grp_id, spk_pos_hist, vel_data, taskState):
+        self.taskState = taskState
+        if abs(vel_data) >= self.config['encoder']['vel'] and self.taskState == 1:
             #print('firing rate vel thresh',vel_data,'tetrode',spk_elec_grp_id)
             self.firing_rate[spk_elec_grp_id][self.cur_pos_ind] += 1
 
@@ -405,8 +434,9 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.tetrodes_with_spikes[0][np.where(
             self.ntrode_list_array == spk_elec_grp_id)] = True
 
-    def next_observation(self, spk_elec_grp_id, spk_pos_hist, vel_data):
-        if abs(vel_data) >= self.config['encoder']['vel']:
+    def next_observation(self, spk_elec_grp_id, spk_pos_hist, vel_data, taskState):
+        self.taskState = taskState
+        if abs(vel_data) >= self.config['encoder']['vel'] and self.taskState == 1:
             self.firing_rate[spk_elec_grp_id][self.cur_pos_ind] += 1
 
         self.observation_next *= spk_pos_hist
@@ -419,31 +449,40 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.tets_with_spikes_next[0][np.where(
             self.ntrode_list_array == spk_elec_grp_id)] = True
 
-    def update_position(self, pos_timestamp, pos_data, vel_data):
+    def update_position(self, pos_timestamp, pos_data, vel_data, taskState):
         # Convert position to bin index in histogram count
         # MEC: added NaN mask with no_anim_boundary
         self.cur_pos_time = pos_timestamp
         self.cur_pos = pos_data
         self.cur_vel = vel_data
+        self.taskState = taskState
         #print('update position result:',self.cur_pos)
         self.cur_pos_ind = int((self.cur_pos - self.pos_range[0]) /
                                self.pos_delta)
         #print('current position',self.cur_pos)
         #print('pos index added to occupancy',self.cur_pos_ind)
 
-        if abs(self.cur_vel) >= self.config['encoder']['vel']:
+        if abs(self.cur_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
             # MEC test: add all positions to occupancy to compare to offline
             # if abs(self.cur_vel) >= 0:
             self.occ[self.cur_pos_ind] += 1
-            self.apply_no_anim_boundary(
-                self.pos_bins_1, self.arm_coords, self.occ, np.nan)
+            self.apply_no_anim_boundary(self.pos_bins_1, self.arm_coords, self.occ, np.nan)
 
+            # originally this was set to 10000
             self.pos_counter += 1
             if self.pos_counter % 10000 == 0:
-                #print('decoder occupancy: ',self.occ)
+                print('decoder occupancy: ',self.occ)
+                print(' occupancy shape: ',self.occ.shape)
                 print('number of position entries decode: ', self.pos_counter)
-                print('firing rates', self.firing_rate)
-                print('total decoded spikes', self.total_decoded_spike_count)
+                #print('firing rates', self.firing_rate)
+                #print('total decoded spikes', self.total_decoded_spike_count)
+        
+        # if re-loading previous run, get occ from config
+        elif self.taskState == 0:
+            self.occ = np.asarray(self.config['encoder']['occupancy'])[0]
+            self.occ = self.occ.astype('float64')
+            self.apply_no_anim_boundary(self.pos_bins_1, self.arm_coords, self.occ, np.nan)
+            #print(self.occ)
 
         return self.occ
 
@@ -614,9 +653,13 @@ class PointProcessDecoder(rt_logging.LoggingClass):
 
     def calculate_posterior_arm_sum(self, posterior, ripple_time_bin):
 
+        # hmmmm we have defined arm_coords many places - try to just define it once
+        # this needs to take into account number of arms
+
         # 8 arm version - i think this should match the transition matrix (before was all values-1, not sure why)
-        arm_coords_rt = [[0, 8], [13, 24], [29, 40], [45, 56], [
-            61, 72], [77, 88], [93, 104], [109, 120], [125, 136]]
+        #arm_coords_rt = [[0, 8], [13, 24], [29, 40], [45, 56], [
+        #    61, 72], [77, 88], [93, 104], [109, 120], [125, 136]]
+        # we should be able to use self.arm_coords
 
         # 4 arm version
         #arm_coords_rt = [[0,8],[13,24],[29,40],[45,56],[61,72]]
@@ -633,9 +676,8 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior_sum_result = np.zeros((1, 9))
         #print('zeros shape: ',self.posterior_sum_result)
 
-        for region_ind, (start_ind, stop_ind) in enumerate(arm_coords_rt):
-            self.posterior_sum_result[0,
-                                      region_ind] = posterior[start_ind:stop_ind + 1].sum()
+        for region_ind, (start_ind, stop_ind) in enumerate(self.arm_coords):
+            self.posterior_sum_result[0,region_ind] = posterior[start_ind:stop_ind + 1].sum()
             # print(self.posterior_sum_result)
             #print('whole posterior sum',posterior.sum())
         # posterior sum vector seems good - always adds to 1
@@ -660,7 +702,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                        realtime_base.RecordIDs.OCCUPANCY],
                                               rec_labels=[['bin_timestamp', 'wall_time', 'velocity', 'real_pos',
                                                            'raw_x', 'raw_y', 'smooth_x', 'smooth_y', 'spike_count', 'next_bin',
-                                                           'ripple', 'ripple_number', 'ripple_length', 'shortcut_message',
+                                                           'taskState','ripple', 'ripple_number', 'ripple_length', 'shortcut_message',
                                                            'box', 'arm1', 'arm2', 'arm3', 'arm4', 'arm5', 'arm6', 'arm7', 'arm8'] +
                                                           ['x{:0{dig}d}'.
                                                            format(x, dig=len(str(config['encoder']
@@ -679,7 +721,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                                                         format(x, dig=len(str(config['encoder']
                                                                                                               ['position']['bins'])))
                                                                                         for x in range(config['encoder']['position']['bins'])]],
-                                              rec_formats=['qdddddddqqqqqqddddddddd' + 'd' * config['encoder']['position']['bins'],
+                                              rec_formats=['qdddddddqqqqqqqddddddddd' + 'd' * config['encoder']['position']['bins'],
                                                            'qddq' + 'd' *
                                                            config['encoder']['position']['bins'],
                                                            'qiii',
@@ -701,8 +743,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.smooth_x = 0
         self.smooth_y = 0
         self.smooth_vel = 0
-        self.velCalc = VelocityCalculator()
-        self.linPosAssign = LinearPositionAssignment()
+        self.velCalc = VelocityCalculator(self.config)
+        self.linPosAssign = LinearPositionAssignment(self.config)
 
         # Send binary record register message
         # self.mpi_send.send_record_register_messages(self.get_record_register_messages())
@@ -725,7 +767,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.ripple_thresh_decoder = False
         self.ripple_time_bin = 0
         self.no_ripple_time_bin = 0
-        self.replay_target_arm = self.config['pp_decoder']['replay_target_arm']
+        self.replay_target_arm = self.config['ripple_conditioning']['replay_target_arm']
         self.posterior_arm_sum = np.zeros((1, 9))
         self.num_above = 0
         self.ripple_number = 0
@@ -738,6 +780,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.used_next_bin = False
         self.decoded_spike = 0
         self.tetrodes_with_spikes = []
+        self.taskState = 1
 
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
@@ -780,11 +823,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         # this seems to run now based on the lfp timekeeper, but there are many more dropped spikes
 
         # decoder with no lfp timekeeper
-        if spike_dec_msg is not None:
-            # this is new version, that uses lfp timekeeper
-            # if spike_dec_msg is not None or (self.msg_counter > 0 and lfp_timekeeper is not None and
-            #                                 lfp_timekeeper.timestamp > self.previous_spike_timestamp+
-            #                                 (self.config['pp_decoder']['bin_size']*2*self.lfp_timekeeper_counter)):
+        #if spike_dec_msg is not None:
+        # this is new version, that uses lfp timekeeper
+        if spike_dec_msg is not None or (self.msg_counter > 0 and lfp_timekeeper is not None and
+                                        lfp_timekeeper.timestamp > self.previous_spike_timestamp+
+                                        (self.config['pp_decoder']['bin_size']*2*self.lfp_timekeeper_counter)):
 
             self.lfp_timekeeper_counter += 1
             self.decode_loop_counter += 1
@@ -805,10 +848,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.lfp_msg_counter += 1
                 self.record_timing(timestamp=lfp_timekeeper.timestamp, elec_grp_id=1,
                                    datatype=datatypes.Datatypes.SPIKES, label='dec_recv')
+            #if spike_dec_msg is not None and self.msg_counter % 10 == 0:
+            #    self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+            #                       datatype=datatypes.Datatypes.SPIKES, label='dec_recv')
             if spike_dec_msg is not None and self.msg_counter % 10 == 0:
-                self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+                self.record_timing(timestamp=self.decode_loop_counter, elec_grp_id=1,
                                    datatype=datatypes.Datatypes.SPIKES, label='dec_recv')
-
             # Update firing rate
 
             # Calculate which time bin spike belongs to
@@ -840,7 +885,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # Spike is in current time bin
                 self.pp_decoder.add_observation(spk_elec_grp_id=spike_dec_msg.elec_grp_id,
                                                 spk_pos_hist=spike_dec_msg.pos_hist,
-                                                vel_data=self.current_vel)
+                                                vel_data=self.current_vel, taskState=self.taskState)
                 #print('decoded spike message',spike_dec_msg.pos_hist)
                 self.spike_count += 1
                 pass
@@ -856,7 +901,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # call a new function: next_observation
                 self.pp_decoder.next_observation(spk_elec_grp_id=spike_dec_msg.elec_grp_id,
                                                  spk_pos_hist=spike_dec_msg.pos_hist,
-                                                 vel_data=self.current_vel)
+                                                 vel_data=self.current_vel, taskState=self.taskState)
                 self.spike_count += 1
 
             # calculate posterior when spike is 2+ bins ahead
@@ -909,6 +954,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     posterior, self.ripple_time_bin)
                 #self.posterior_arm_sum = np.zeros((1,9))
 
+                # check arm number in config file and then zero-out empty arms
+                # note this should not be necessary 
+
                 # if spike_dec_msg is not None:
                 #    print('posterior arm sum, spike loop',np.around(self.posterior_arm_sum,decimals=2),self.spike_count)
 
@@ -944,7 +992,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                   self.current_time_bin * self.time_bin_size, time,
                                   self.current_vel,
                                   self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
-                                  self.spike_count, self.used_next_bin,
+                                  self.spike_count, self.used_next_bin, self.taskState,
                                   self.ripple_thresh_decoder, self.ripple_number, self.ripple_time_bin, self.shortcut_message_sent,
                                   self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                   self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
@@ -998,7 +1046,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                       self.current_time_bin * self.time_bin_size, time,
                                       self.current_vel,
                                       self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
-                                      0, self.used_next_bin,
+                                      0, self.used_next_bin, self.taskState,
                                       self.ripple_thresh_decoder, self.ripple_number, self.ripple_time_bin, self.shortcut_message_sent,
                                       self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                       self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
@@ -1023,7 +1071,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     # delay decoder
                     self.pp_decoder.next_observation(spk_elec_grp_id=spike_dec_msg.elec_grp_id,
                                                      spk_pos_hist=spike_dec_msg.pos_hist,
-                                                     vel_data=self.current_vel)
+                                                     vel_data=self.current_vel,taskState=self.taskState)
 
                 # Increment current time bin to latest spike
                 # i think this is a problem - will reverse all the advantage of having a delay
@@ -1058,8 +1106,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             if lfp_timekeeper is not None and self.lfp_msg_counter % 10 == 0:
                 self.record_timing(timestamp=lfp_timekeeper.timestamp, elec_grp_id=1,
                                    datatype=datatypes.Datatypes.SPIKES, label='dec_finish')
+            #if spike_dec_msg is not None and self.msg_counter % 10 == 0:
+            #    self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+            #                       datatype=datatypes.Datatypes.SPIKES, label='dec_finish')
             if spike_dec_msg is not None and self.msg_counter % 10 == 0:
-                self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+                self.record_timing(timestamp=self.decode_loop_counter, elec_grp_id=1,
                                    datatype=datatypes.Datatypes.SPIKES, label='dec_finish')
 
             pass
@@ -1072,7 +1123,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # print(pos_data)
             if not self.trodessource:
                 self.pp_decoder.update_position(
-                    pos_timestamp=pos_data.timestamp, pos_data=pos_data.x)
+                    pos_timestamp=pos_data.timestamp, pos_data=pos_data.x, taskState=self.taskState)
             else:
                 #self.pp_decoder.update_position(pos_timestamp=pos_data.timestamp, pos_data=pos_data.x)
                 # we want to use linearized position here
@@ -1100,7 +1151,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 # MEC added: return occupancy
                 occupancy = self.pp_decoder.update_position(pos_timestamp=pos_data.timestamp,
-                                                            pos_data=current_pos, vel_data=self.current_vel)
+                                                            pos_data=current_pos, vel_data=self.current_vel,
+                                                            taskState=self.taskState)
 
                 # save record with occupancy
                 # TO DO: save raw X and raw Y also
@@ -1121,6 +1173,23 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                           'smooth velocity = ', np.around(
                               self.smooth_vel, decimals=2), 'segment = ', pos_data.segment,
                           'smooth_x', np.around(self.smooth_x, decimals=2), 'smooth_y', np.around(self.smooth_y, decimals=2))
+
+                # need to add reading in of taskState text file
+                # check new_ripple text file for taskState - needs to be updated manually
+                # 1 = first cued arm trials, 2 = content trials, 3 = second cued arm trials
+                if self.pos_msg_counter % 60 == 0:
+                  #if self.vel_pos_counter % 1000 == 0:
+                      #print('thresh_counter: ',self.thresh_counter)
+                      with open('config/new_ripple_threshold.txt') as taskState_file:
+                          fd = taskState_file.fileno()
+                          fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                          # read file
+                          for taskState_file_line in taskState_file:
+                              pass
+                          new_taskState = taskState_file_line
+                      # final 1 character in line is task state
+                      self.taskState = np.int(new_taskState[11:12])
+                      print('taskState in decoder',self.taskState)
 
                 #print(pos_data.x, pos_data.segment)
                 # TODO implement trodes cameramodule update position function
@@ -1276,6 +1345,7 @@ class DecoderProcess(realtime_base.RealtimeProcess):
                                                                           manager_rank=config['rank']['supervisor'])
 
         self.terminate = False
+        self.main_loop_counter = 1
 
         self.mpi_send = DecoderMPISendInterface(
             comm=comm, rank=rank, config=config)
@@ -1326,11 +1396,22 @@ class DecoderProcess(realtime_base.RealtimeProcess):
 
         try:
             while not self.terminate:
+                #self.main_loop_counter += 1
+                # 1,000,000 is about every 2 sec
+                #if self.main_loop_counter % 100000 == 0:
+                #    #print('decoder main loop')
+                #    self.record_timing(timestamp=self.main_loop_counter, elec_grp_id=1,
+                #                   datatype=datatypes.Datatypes.SPIKES, label='dec_loop_1')
                 self.dec_man.process_next_data()
+                #if self.main_loop_counter % 100000 == 0:
+                #    #print('decoder main loop')
+                #    self.record_timing(timestamp=self.main_loop_counter, elec_grp_id=1,
+                #                   datatype=datatypes.Datatypes.SPIKES, label='dec_loop_2')                    
                 self.mpi_recv.__next__()
 
         except StopIteration as ex:
             self.class_log.info(
                 'Terminating DecoderProcess (rank: {:})'.format(self.rank))
 
+        # can try to save firing rate dict to a json file here
         self.class_log.info("Decoding Process reached end, exiting.")

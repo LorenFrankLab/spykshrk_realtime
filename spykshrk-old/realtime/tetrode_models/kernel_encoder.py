@@ -94,7 +94,7 @@ class RSTKernelEncoder:
                                    pos_bin_center_tmp[int(len(pos_bin_center_tmp)/2)],
                                    self.param.pos_kernel_std)
 
-        self.occupancy_counter = 0
+        self.occupancy_counter = 1
 
         # define arm_coords for occupancy
         self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]])
@@ -127,14 +127,15 @@ class RSTKernelEncoder:
                 image[:, bounds[0]:bounds[1]] = fill
         return image
 
-    def update_covariate(self, covariate, current_vel=None):
+    def update_covariate(self, covariate, current_vel=None, taskState=None):
         self.covariate = covariate
         #print('position in update position: ',self.covariate)
         self.current_vel = current_vel
+        self.taskState = taskState
         # bin_idx = np.nonzero((self.param.pos_hist_struct.pos_bin_edges - covariate) > 0)[0][0] - 1
         bin_idx = self.param.pos_hist_struct.which_bin(self.covariate)
         #only want to add to pos_hist during movement times - aka vel > 8
-        if abs(self.current_vel) >= self.config['encoder']['vel']:
+        if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
             self.pos_hist[bin_idx] += 1
             #print('occupancy before',self.pos_hist)
             #print('update_covariate current_vel: ',self.current_vel)
@@ -143,6 +144,13 @@ class RSTKernelEncoder:
             #print('occupancy',self.pos_hist)
 
             self.occupancy_counter += 1
+        # if taskstate 0, load pos_hist from config file
+        elif self.taskState == 0:
+            self.pos_hist = np.asarray(self.config['encoder']['occupancy'])[0]
+            self.pos_hist = self.pos_hist.astype('float64')
+            self.apply_no_anim_boundary(self.pos_bins, self.arm_coords, self.pos_hist, np.nan)
+            #print(self.pos_hist)
+
         if self.occupancy_counter % 10000 == 0:
             #print('encoder_query_occupancy: ',self.pos_hist)
             print('number of position entries encoder: ',self.occupancy_counter)      

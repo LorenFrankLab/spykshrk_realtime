@@ -157,8 +157,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.pos_interface = pos_interface
 
         #initialize velocity calc and linear position assignment functions
-        self.velCalc = VelocityCalculator()
-        self.linPosAssign = LinearPositionAssignment()
+        self.velCalc = VelocityCalculator(self.config)
+        self.linPosAssign = LinearPositionAssignment(self.config)
 
         kernel = RST.kernel_param(mean=config['encoder']['mark_kernel']['mean'],
                                   stddev=config['encoder']['mark_kernel']['std'],
@@ -187,6 +187,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_elec_grp_id = 0
 
         # taskState variable for adding spikes to encoding model
+        # set to 0 to test loading the old tree - will turn off new mark and use old occupancy in kernel_encoder
         self.taskState = 1
 
         time = MPI.Wtime()
@@ -214,6 +215,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
             #print('position parameters: ',self.rst_param)
             self.spike_interface.register_datatype_channel(channel=ntrode)
 
+            # MEC: to reload old tree try changing True to False in this function call
             self.encoders.setdefault(ntrode, kernel_encoder.RSTKernelEncoder('/tmp/ntrode{:}'.
                                                                              format(ntrode),
                                                                              True, self.rst_param,self.config))
@@ -293,6 +295,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     amp_marks = [datapoint.data[0][max_3_ind],datapoint.data[1][max_3_ind],datapoint.data[2][max_3_ind],datapoint.data[3][max_3_ind]]
                 #print('new mark',amp_marks)
 
+                self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                                   datatype=datatypes.Datatypes.SPIKES, label='kde_start')
                 # this looks up the current spike in the RStar Tree
                 if max(amp_marks) > self.config['encoder']['spk_amp']:
                     #print(datapoint.timestamp,datapoint.elec_grp_id, amp_marks)
@@ -302,6 +306,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                         datapoint.elec_grp_id)                # type: kernel_encoder.RSTKernelEncoderQuery
                     #print('decoded spike',query_result.query_hist)
 
+                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                                   datatype=datatypes.Datatypes.SPIKES, label='kde_end')
 
                     # for weight, position in zip(query_result.query_weights, query_result.query_positions):
                     #     self.write_record(realtime_base.RecordIDs.ENCODER_QUERY,
@@ -309,6 +315,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     #                       query_result.ntrode_id,
                     #                       weight, position)
 
+                    # save query_weights instead of query_hist: this will save number of spikes in rectangle
                     self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
                                       query_result.query_time,
                                       query_result.elec_grp_id,
@@ -316,8 +323,11 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                       self.current_pos,self.current_vel,
                                       *query_result.query_hist)
 
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                       datatype=datatypes.Datatypes.SPIKES, label='spk_dec')
+                    # weights have constantly changing size and are very small numbers - how to get # marks??
+                    #print('weights',query_result.query_weights)
+
+                    #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                    #                   datatype=datatypes.Datatypes.SPIKES, label='spk_dec')
 
                     self.mpi_send.send_decoded_spike(SpikeDecodeResultsMessage(timestamp=query_result.query_time,
                                                                                elec_grp_id=
@@ -338,6 +348,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     # can also add a secondary spike amplitude filter here
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
                     if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
+                        if self.spk_counter % 1000 == 0 and self.rank == 25:
+                            print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 
@@ -377,7 +389,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 # check new_ripple text file for taskState - needs to be updated manually
                 # 1 = first cued arm trials, 2 = content trials, 3 = second cued arm trials
-                if self.pos_counter % 600 == 0:
+                if self.pos_counter % 60 == 0:
                   #if self.vel_pos_counter % 1000 == 0:
                       #print('thresh_counter: ',self.thresh_counter)
                       with open('config/new_ripple_threshold.txt') as taskState_file:
@@ -407,7 +419,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 for encoder in self.encoders.values():
                     #print('encoder side current vel: ',self.current_vel)
-                    encoder.update_covariate(self.current_pos,self.current_vel)
+                    encoder.update_covariate(self.current_pos,self.current_vel,self.taskState)
 
                 if self.pos_counter % 1000 == 0:
                     self.class_log.info('Received {} pos datapoints.'.format(self.pos_counter))
