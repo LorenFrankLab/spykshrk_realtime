@@ -19,14 +19,14 @@ from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream, 
 
 
 class RippleParameterMessage(rt_logging.PrintableMessage):
-    def __init__(self, rip_coeff1=1.2, rip_coeff2=0.2, ripple_threshold=5, baseline_window_timestamp=10000, n_above_thresh=1,
+    def __init__(self, rip_coeff1=1.2, rip_coeff2=0.2, ripple_threshold=5, samp_divisor=10000, n_above_thresh=1,
                  lockout_time=7500, ripple_conditioning_lockout_time = 7500, posterior_lockout_time = 7500,
                  detect_no_ripple_time=60000, dio_gate_port=None, detect_no_ripples=False,
                  dio_gate=False, enabled=False, use_custom_baseline=False, update_custom_baseline=False):
         self.rip_coeff1 = rip_coeff1
         self.rip_coeff2 = rip_coeff2
         self.ripple_threshold = ripple_threshold
-        self.baseline_window_timestamp = baseline_window_timestamp
+        self.samp_divisor = samp_divisor
         self.n_above_thresh = n_above_thresh
         self.lockout_time = lockout_time
         self.ripple_conditioning_lockout_time = ripple_conditioning_lockout_time
@@ -180,10 +180,8 @@ class RippleFilter(rt_logging.LoggingClass):
         self.lfp_display_counter = 0
         self.config = config
 
-        self.conditioning_ripple_threshold = self.config['ripple_conditioning']['condition_rip_thresh']
+        self.conditioning_ripple_threshold = 4
         self.condition_thresh_crossed = False
-
-        self.session_type = self.config['ripple_conditioning']['session_type']
 
         # i think we need to open the ripple threshold file here in the init
         # this doesnt work because the file is closed when i try to use it below - try moving this down
@@ -280,7 +278,6 @@ class RippleFilter(rt_logging.LoggingClass):
 
         if self.in_lockout:
             # MEC: i dont understand these lines and they might be setting the current_val to 0 during lockout
-            # MEC: okay this does not appear to be used at all
             # lets just try the normal calculations during lockout times
             # or could try lowering the lockout time to 7500
             #rd = self.update_filter(((self.current_time - self.last_stim_time) / self.param.lockout_time)
@@ -289,53 +286,34 @@ class RippleFilter(rt_logging.LoggingClass):
             ##rd = 1
             #self.current_val = self.ripple_mean
             #self.thresh_crossed = False
-            #print('ripple process lockout time')
 
             rd = self.update_filter(data)
             self.current_val = self.custom_baseline_mean
             self.thresh_crossed = False
 
         else:
-            # this doesnt work - no timer in this class
-            #if self.lfp_display_counter % 100 == 0:
-            #    self.record_timing(timestamp=timestamp, elec_grp_id=self.elec_grp_id,
-            #                           datatype=datatypes.Datatypes.LFP, label='rip_filt_1')
+
             rd = self.update_filter(data)
-            #if self.lfp_display_counter % 100 == 0:
-            #    self.record_timing(timestamp=timestamp, elec_grp_id=self.elec_grp_id,
-            #                           datatype=datatypes.Datatypes.LFP, label='rip_filt_2')
             #to turn off ripple filter use next line and comment out line above
             #print(rd)
             #rd = 1
 
             y = abs(rd)
 
-            # set mean and std to match values from config
-            if self.lfp_display_counter == 0 and self.session_type == 'sleep':
-                self.ripple_mean = 0.0
-                self.ripple_std = 0.0
-                print('sleep, initial LFP mean:',self.ripple_mean,'std:',self.ripple_std)            
-            elif self.lfp_display_counter == 0:
-                self.ripple_mean = self.custom_baseline_mean
-                self.ripple_std = self.custom_baseline_std
-                print('run, initial LFP mean:',self.ripple_mean,'std:',self.ripple_std)
             # calculate and display lfp baseline
-            # comment out to prevent updating
-            #self.ripple_mean += (y - self.ripple_mean) / self.param.baseline_window_timestamp
-            #self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.baseline_window_timestamp
+            self.ripple_mean += (y - self.ripple_mean) / self.param.samp_divisor
+            self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.samp_divisor
             self.lfp_display_counter += 1
             # display every 1 sec during baseline, every 10 sec during run session
             # only display from process rank 3
-            #if self.config['ripple_conditioning']['display_baseline'] == True:
-            if self.session_type == 'sleep':
-                if self.lfp_display_counter % 7500 == 0:
-                    #print('mean')
-                    print('mean -','"',self.elec_grp_id,'":',np.around(self.ripple_mean,decimals=2),',',
-                    '- stdev -','"',self.elec_grp_id,'":',np.around(self.ripple_std,decimals=2),',')
+            if self.config['ripple_conditioning']['display_baseline'] == True:
+                if self.lfp_display_counter % 1500 == 0:
+                    print('mean',self.elec_grp_id,' = ',np.around(self.ripple_mean,decimals=2),
+                          ' stdev',self.elec_grp_id,' = ',np.around(self.ripple_std,decimals=2))
             else:
-                if self.lfp_display_counter % 90000 == 0:
-                    print('mean -','"',self.elec_grp_id,'":',np.around(self.ripple_mean,decimals=2),',',
-                    '- stdev -','"',self.elec_grp_id,'":',np.around(self.ripple_std,decimals=2),',')
+                if self.lfp_display_counter % 15000 == 0:
+                    print('mean',self.elec_grp_id,' = ',np.around(self.ripple_mean,decimals=2),
+                          ' stdev',self.elec_grp_id,' = ',np.around(self.ripple_std,decimals=2))
 
             # open and read text file that will allow you to update ripple threshold
             # looks for three digits, 055 > 5.5 sd
@@ -359,8 +337,8 @@ class RippleFilter(rt_logging.LoggingClass):
                           'content ripple threshold = ',self.param.ripple_threshold)
 
             if not self.stim_enabled:
-                self.ripple_mean += (y - self.ripple_mean) / self.param.baseline_window_timestamp
-                self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.baseline_window_timestamp
+                self.ripple_mean += (y - self.ripple_mean) / self.param.samp_divisor
+                self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.samp_divisor
                 if not self.param.use_custom_baseline:  # only update the threshold if we're not using a custom baseline
                     self.current_thresh = self.ripple_mean + self.ripple_std * self.param.ripple_threshold
                     # print('ntrode', crf.nTrodeId, 'mean', crf.rippleMean)
@@ -379,23 +357,14 @@ class RippleFilter(rt_logging.LoggingClass):
                 self.pos_gain = self.update_envelop(gain)
                 self.current_val += df * gain
 
-            # try to use updated mean and std instead of custom here
             if self.param.use_custom_baseline:
                 #print(self.custom_baseline_mean, self.custom_baseline_std * self.param.ripple_threshold, self.param.ripple_threshold)
                 #make the if statement based on the conditioning_ripple_threshold and elif for param.ripple_threshold
                 # now need to add this new threshold to the ripple threshold message
-                #original
-                #if self.current_val >= (self.custom_baseline_mean + self.custom_baseline_std *
-                #                        self.conditioning_ripple_threshold):
-                #new
-                if self.current_val >= (self.ripple_mean + self.ripple_std *
+                if self.current_val >= (self.custom_baseline_mean + self.custom_baseline_std *
                                         self.conditioning_ripple_threshold):
                     self.condition_thresh_crossed = True
-                #original
-                #elif self.current_val >= (self.custom_baseline_mean + self.custom_baseline_std *
-                #                        self.param.ripple_threshold):
-                #new
-                elif self.current_val >= (self.ripple_mean + self.ripple_std *
+                elif self.current_val >= (self.custom_baseline_mean + self.custom_baseline_std *
                                         self.param.ripple_threshold):
                     self.condition_thresh_crossed = False
                     self.thresh_crossed = True
@@ -415,12 +384,10 @@ class RippleFilter(rt_logging.LoggingClass):
         # rec_labels=['current_time', 'ntrode_index', 'thresh_crossed', 'lockout', 'lfp_data', 'rd','current_val'],
         # rec_format='Ii??dd',
         #if self.current_time < 40000000:
-        # 4-30: replace self._custom_baseline_mean, self._custom_baseline_std, with rip_mean and rip_std
-        if self.lfp_display_counter % 10 == 0:
-            self.rec_base.write_record(realtime_base.RecordIDs.RIPPLE_STATE,
+        self.rec_base.write_record(realtime_base.RecordIDs.RIPPLE_STATE,
                                    self.current_time, self.elec_grp_id, self.param.ripple_threshold,
                                    self.conditioning_ripple_threshold, self.thresh_crossed,
-                                   self.in_lockout, self.ripple_mean, self.ripple_std,
+                                   self.in_lockout, self._custom_baseline_mean, self._custom_baseline_std,
                                    int(data), rd, self.current_val)
 
         return self.thresh_crossed, self.condition_thresh_crossed
@@ -615,9 +582,8 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
 
                 #print('at ripple: ',datapoint.timestamp,datapoint.data)
 
-                if self.lfp_counter % 100 == 0:
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                        datatype=datatypes.Datatypes.LFP, label='rip_send')
+                #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                   datatype=datatypes.Datatypes.LFP, label='rip_send')
 
                 # this sends to stim_decider class in main_process.py that then applies the # of tetrode filter
                 self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,

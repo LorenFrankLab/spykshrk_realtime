@@ -15,12 +15,12 @@
     },
 
     "files": {
-        "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "jap_ptp_5_8",
+        "output_dir": "/mnt/stelmo/mcoulter/spykshrk_output/greenflash",
+        "prefix": "jaq_3_20_ptp_camera",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
-        "backup_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output"
+        "backup_dir": "/mnt/stelmo/mcoulter/spykshrk_output/greenflash"
     },
 
     "trodes": {
@@ -28,14 +28,11 @@
     },
 
     "ripple_conditioning": {
-        "session_type": "run",
+        "display_baseline": false,
         "posterior_sum_threshold": 0.5,
         "posterior_sum_rip_only": false,
         "post_sum_sliding_window": 11,
-        "ripple_detect_velocity": 4,
-        "spike_count_window_sec": 300,
-        "previous_spike_count_avg": 2.06,
-        "previous_spike_count_std": 1.43
+        "ripple_detect_velocity": 5
     },
 
     "ripple": {
@@ -57,6 +54,15 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
+            "1": 12000,
+            "2": 12000,
+            "3": 12000,
+            "4": 12000,
+            "5": 12000,
+            "6": 12000,
+            "7": 12000,
+            "8": 12000,
+            "9": 12000,
             "10": 5.8,
             "11": 12000,
             "12": 12000,
@@ -67,10 +73,28 @@
             "17": 5.3,
             "18": 12000,
             "19": 8.5,
+            "20": 12000,
+            "21": 12000,
+            "22": 12000,
+            "23": 12000,
+            "24": 12000,
+            "25": 12000,
+            "26": 12000,
+            "27": 12000,
+            "28": 12000,
             "29": 6.9,
             "30": 12000
         },
         "CustomRippleBaselineStdMessage": {
+            "1": 12000,
+            "2": 12000,
+            "3": 12000,
+            "4": 12000,
+            "5": 12000,
+            "6": 12000,
+            "7": 12000,
+            "8": 12000,
+            "9": 12000,
             "10": 3.7,
             "11": 12000,
             "12": 12000,
@@ -81,6 +105,15 @@
             "17": 3.3,
             "18": 12000,
             "19": 5.3,
+            "20": 12000,
+            "21": 12000,
+            "22": 12000,
+            "23": 12000,
+            "24": 12000,
+            "25": 12000,
+            "26": 12000,
+            "27": 12000,
+            "28": 12000,
             "29": 4.6,
             "30": 12000
         }
