@@ -175,6 +175,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
         self.spk_counter = 0
         self.pos_counter = 0
+        self.count_noise_events = 0
 
         self.current_pos = 0
         self.current_vel = 0
@@ -247,7 +248,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 self.spk_counter += 1
 
-                # first find dead channels from spykshrk config file and replace data with 0s
+                # first find dead channels from spykshrk config file and replace data with 0s (range: 0-3)
                 if str(datapoint.elec_grp_id) in self.config['encoder']['dead_channels']:
                     #print('dead channel',datapoint.elec_grp_id)
                     dead_channel = self.config['encoder']['dead_channels'].get(str(datapoint.elec_grp_id))
@@ -295,10 +296,23 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     amp_marks = [datapoint.data[0][max_3_ind],datapoint.data[1][max_3_ind],datapoint.data[2][max_3_ind],datapoint.data[3][max_3_ind]]
                 #print('new mark',amp_marks)
 
+                # test multiple dead channls - great it works!
+                #if datapoint.elec_grp_id == 7:
+                #    print('tet 7 marks:',amp_marks)
+
                 self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
                                    datatype=datatypes.Datatypes.SPIKES, label='kde_start')
                 # this looks up the current spike in the RStar Tree
-                if max(amp_marks) > self.config['encoder']['spk_amp']:
+                # also filter out large noise events (start with 1500uV)
+                if not np.all(np.asarray(amp_marks)<self.config['encoder']['noise_max_amp']):
+                    print('large noise mark: positive')
+                    self.count_noise_events += 1
+                elif not np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp']):
+                    print('large noise mark: negative')
+                    self.count_noise_events += 1
+                if (max(amp_marks) > self.config['encoder']['spk_amp'] and 
+                    np.all(np.asarray(amp_marks)<self.config['encoder']['noise_max_amp']) and
+                    np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp'])):
                     #print(datapoint.timestamp,datapoint.elec_grp_id, amp_marks)
                     query_result = self.encoders[datapoint.elec_grp_id]. \
                         query_mark_hist(amp_marks,
@@ -348,8 +362,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     # can also add a secondary spike amplitude filter here
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
                     if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
-                        if self.spk_counter % 1000 == 0 and self.rank == 25:
+                        if self.spk_counter % 100 == 0 and self.rank == 25:
                             print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
+                            print('number of noise events detected:',self.count_noise_events)
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 
@@ -387,12 +402,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #NOTE (MEC, 9-1-19): we need to include encoding velocity when calling update_covariate
                 self.pos_counter += 1
 
-                # check new_ripple text file for taskState - needs to be updated manually
+                # read taskstate.txt for taskState - needs to be reset manually at begin of session
                 # 1 = first cued arm trials, 2 = content trials, 3 = second cued arm trials
-                if self.pos_counter % 60 == 0:
+                # lets try 15 instead of 60
+                if self.pos_counter % 15 == 0:
                   #if self.vel_pos_counter % 1000 == 0:
                       #print('thresh_counter: ',self.thresh_counter)
-                      with open('config/new_ripple_threshold.txt') as taskState_file:
+                      with open('config/taskstate.txt') as taskState_file:
                           fd = taskState_file.fileno()
                           fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
                           # read file
@@ -400,9 +416,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                               pass
                           new_taskState = taskState_file_line
                       # final 1 character in line is task state
-                      self.taskState = np.int(new_taskState[11:12])
-                      if self.rank == 10:
-                          print('task state =',self.taskState)
+                      self.taskState = np.int(new_taskState[0:1])
+                      #if self.rank == 10:
+                      #    print('encoder taskstate =',self.taskState)
 
                 # run positionassignment, pos smoothing, and velocity calculator functions
                 # currently smooth position and velocity

@@ -97,7 +97,12 @@ class RSTKernelEncoder:
         self.occupancy_counter = 1
 
         # define arm_coords for occupancy
-        self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]])
+        #self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]])
+        # for 2-arm tree track
+        #self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+        # for 4-arm sun god
+        self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins = np.arange(0,self.max_pos,1)
 

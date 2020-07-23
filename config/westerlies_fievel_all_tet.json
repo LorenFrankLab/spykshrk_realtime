@@ -7,16 +7,16 @@
         "decoder": 1,
         "ripples": [2,3,4,5,6],
         "encoders": [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]
-    }, 
+    },
 
     "rank_settings": {
-        "enable_rec": [0, 1, 2, 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
+        "enable_rec": [0, 1,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         "enable_profiler": [0, 1, 2, 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]
     },
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "fievel_decoder_19tet_1_29",
+        "prefix": "fievel_19_4_19tet_6_8",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -26,24 +26,35 @@
     "trodes": {
         "voltage_scaling_factor": 0.195
     },
-
+ 
     "ripple_conditioning": {
-        "display_baseline": false,
-        "posterior_sum_threshold": 0.5
+        "session_type": "run",
+        "posterior_sum_threshold": 0.5,
+        "other_arm_threshold": 0.2,
+        "posterior_sum_rip_only": false,
+        "post_sum_sliding_window": 11,
+        "ripple_detect_velocity": 4,
+        "spike_count_window_sec": 300,
+        "previous_spike_count_avg": 1.133,
+        "previous_spike_count_std": 0.712,
+        "replay_target_arm": 1,
+        "condition_rip_thresh": 100,
+        "shortcut_msg_lockout": 30000
+
     },
 
     "ripple": {
         "RippleParameterMessage": {
             "rip_coeff1": 1.2,
             "rip_coeff2": 0.2,
-            "ripple_threshold": 5,
-            "samp_divisor": 10000,
-            "n_above_thresh": 2,
-            "lockout_time": 4500,
-            "posterior_lockout_time": 3750,
-            "ripple_conditioning_lockout_time": 3750,
+            "ripple_threshold": 4,
+            "baseline_window_timestamp": 450000,
+            "n_above_thresh": 4,
+            "lockout_time": 6000,
+            "posterior_lockout_time": 0,
+            "ripple_conditioning_lockout_time": 0,
             "detect_no_ripples": false,
-            "detect_no_ripple_time": 60000,
+            "detect_no_ripple_time": 0,
             "dio_gate": false,
             "dio_gate_port": -1,
             "enabled": true,
@@ -51,68 +62,50 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
-            "1": 12000,
-            "2": 12000,
-            "3": 12000,
-            "4": 12000,
-            "5": 12000,
-            "6": 12000,
-            "7": 12000,
-            "8": 12000,
-            "9": 12000,
-            "10": 7.65,
-            "11": 12000,
-            "12": 7.56,
-            "13": 12000,
-            "14": 12000,
-            "15": 12000,
-            "16": 12000,
-            "17": 12000,
-            "18": 12000,
-            "19": 12000,
-            "20": 12000,
-            "21": 12000,
-            "22": 5.67,
-            "23": 8.73,
-            "24": 12000,
-            "25": 11.74,
-            "26": 12000,
-            "27": 12000,
-            "28": 12000,
-            "29": 12000,
-            "30": 12000
+            " 5 ": 6.79 , 
+            " 7 ": 6.18 , 
+            " 15 ": 4.7 , 
+            " 3 ": 5.06 , 
+            " 1 ": 7.36 , 
+            " 6 ": 7.74 , 
+            " 14 ": 6.89 , 
+            " 19 ": 9.39 , 
+            " 29 ": 7.16 , 
+            " 9 ": 7.33 , 
+            " 17 ": 7.83 , 
+            " 27 ": 9.39 , 
+            " 8 ": 7.05 , 
+            " 16 ": 7.35 , 
+            " 24 ": 9.16 , 
+            " 11 ": 8.3 , 
+            " 18 ": 9.41 , 
+            " 28 ": 8.35 , 
+            " 20 ": 9.26 , 
+            " 25 ": 6.22
+
         },
         "CustomRippleBaselineStdMessage": {
-            "1": 12000,
-            "2": 12000,
-            "3": 12000,
-            "4": 12000,
-            "5": 12000,
-            "6": 12000,
-            "7": 12000,
-            "8": 12000,
-            "9": 12000,
-            "10": 5,
-            "11": 12000,
-            "12": 4.91,
-            "13": 12000,
-            "14": 12000,
-            "15": 12000,
-            "16": 12000,
-            "17": 12000,
-            "18": 12000,
-            "19": 12000,
-            "20": 12000,
-            "21": 12000,
-            "22": 3.45,
-            "23": 5.64,
-            "24": 12000,
-            "25": 7.45,
-            "26": 12000,
-            "27": 12000,
-            "28": 12000,
-            "29": 12000,
-            "30": 12000
+            " 5 ": 4.49 ,
+            " 7 ": 4.05 ,
+            " 15 ": 3.04 ,
+            " 3 ": 3.19 ,
+            " 1 ": 4.83 ,
+            " 6 ": 5.12 ,
+            " 14 ": 4.62 ,
+            " 19 ": 6.22 ,
+            " 29 ": 4.69 ,
+            " 9 ": 4.93 ,
+            " 17 ": 5.12 ,
+            " 27 ": 6.46 ,
+            " 8 ": 4.76 ,
+            " 16 ": 4.74 ,
+            " 24 ": 6.25 ,
+            " 11 ": 5.68 ,
+            " 18 ": 6.32 ,
+            " 28 ": 5.7 ,
+            " 20 ": 6.25 ,
+            " 25 ": 4.12
+
         }
     }, 
 
@@ -136,8 +129,14 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 8,
-        "spk_amp": 100
+        "vel": 4,
+        "spk_amp": 150,
+        "dead_channels": {
+            "6": 3,
+            "17": 3
+        },
+        "occupancy": [[0]]
+
     },
 
     "decoder": "pp_decoder",
@@ -147,16 +146,16 @@
     },
 
     "pp_decoder": {
+        "number_arms": 8,
         "bin_size": 150,
-        "trans_mat_uniform_gain": 0.0001,
-        "trans_mat_smoother_std": 3,
-        "replay_target_arm": 0
+        "trans_mat_uniform_gain": 0.001,
+        "trans_mat_smoother_std": 3
     },
 
     "trodes_network": {
         "address" : "tcp://127.0.0.1",
         "port": 49152,
-        "decoding_tetrodes": [1, 2, 3, 5, 7, 8, 9,10,11,14, 15, 16, 18, 19, 20,24,27, 28, 29],
-        "ripple_tetrodes": [10,12,22,23,25]
+        "decoding_tetrodes": [1,3,5,6,7,8,9,11,14,15,16,17,18,19,20,24,27,28,29],
+        "ripple_tetrodes": [1,3,5,6,7,8,9,11,14,15,16,17,18,19,20,24,27,28,29,25]
     }
 }

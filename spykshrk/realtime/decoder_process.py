@@ -23,9 +23,9 @@ class PosteriorSum(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'IIdddddddddi'
+    _byte_format = 'IIdddddddddiii'
 
-    def __init__(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count):
+    def __init__(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max):
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
         self.box = box
@@ -38,18 +38,21 @@ class PosteriorSum(rt_logging.PrintableMessage):
         self.arm7 = arm7
         self.arm8 = arm8
         self.spike_count = spike_count
+        self.crit_ind = crit_ind
+        self.posterior_max = posterior_max
 
     def pack(self):
         return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.box,
                            self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
-                           self.arm8, self.spike_count)
+                           self.arm8, self.spike_count, self.crit_ind, self.posterior_max)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count = struct.unpack(
+        bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max = struct.unpack(
             cls._byte_format, message_bytes)
         return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, box=box, arm1=arm1, arm2=arm2,
-                   arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, spike_count=spike_count)
+                   arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, spike_count=spike_count,
+                   crit_ind=crit_ind, posterior_max=posterior_max)
 
 
 class VelocityPosition(rt_logging.PrintableMessage):
@@ -86,9 +89,10 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     # def sending posterior message to supervisor with POSTERIOR tag
-    def send_posterior_message(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count):
+    def send_posterior_message(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max):
         message = PosteriorSum(bin_timestamp, spike_timestamp, box,
-                               arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count)
+                               arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count,
+                               crit_ind, posterior_max)
         #print('stim_message: ',message)
 
         self.comm.Send(buf=message.pack(),
@@ -234,8 +238,11 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         elif self.number_arms == 4:
             self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
         elif self.number_arms == 2:
-            self.arm_coords = np.array([[0,8],[13,24],[29,40]])
-        
+            #sun god
+            #self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+            #tree track
+            self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins_1 = np.arange(0, self.max_pos, 1)
 
@@ -703,7 +710,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                               rec_labels=[['bin_timestamp', 'wall_time', 'velocity', 'real_pos',
                                                            'raw_x', 'raw_y', 'smooth_x', 'smooth_y', 'spike_count', 'next_bin',
                                                            'taskState','ripple', 'ripple_number', 'ripple_length', 'shortcut_message',
-                                                           'box', 'arm1', 'arm2', 'arm3', 'arm4', 'arm5', 'arm6', 'arm7', 'arm8'] +
+                                                           'box', 'arm1', 'arm2', 'arm3', 'arm4', 'arm5', 'arm6', 'arm7', 'arm8',
+                                                           'cred_int'] +
                                                           ['x{:0{dig}d}'.
                                                            format(x, dig=len(str(config['encoder']
                                                                                  ['position']['bins'])))
@@ -721,7 +729,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                                                         format(x, dig=len(str(config['encoder']
                                                                                                               ['position']['bins'])))
                                                                                         for x in range(config['encoder']['position']['bins'])]],
-                                              rec_formats=['qdddddddqqqqqqqddddddddd' + 'd' * config['encoder']['position']['bins'],
+                                              rec_formats=['qdddddddqqqqqqqdddddddddd' + 'd' * config['encoder']['position']['bins'],
                                                            'qddq' + 'd' *
                                                            config['encoder']['position']['bins'],
                                                            'qiii',
@@ -781,6 +789,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.decoded_spike = 0
         self.tetrodes_with_spikes = []
         self.taskState = 1
+
+        # credible interval and posterior max
+        self.spxx = []
+        self.crit_ind = 0
+        self.posterior_max = 0
 
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
@@ -954,6 +967,16 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     posterior, self.ripple_time_bin)
                 #self.posterior_arm_sum = np.zeros((1,9))
 
+                # add credible interval here and add to message
+                self.spxx = np.sort(posterior)[::-1]
+                self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
+                #if spike_dec_msg is not None and self.msg_counter % 10000 == 0:
+                #    print('credible interval',self.crit_ind)
+
+                # calculate max position of posterior
+                self.posterior_max = posterior.argmax()
+                # insert equation for index max
+
                 # check arm number in config file and then zero-out empty arms
                 # note this should not be necessary 
 
@@ -981,7 +1004,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
                                                      self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
-                                                     self.spike_count)
+                                                     self.spike_count,self.crit_ind,self.posterior_max)
 
                 self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
                                   self.current_time_bin * self.time_bin_size, time,
@@ -993,7 +1016,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                   self.current_vel,
                                   self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                   self.spike_count, self.used_next_bin, self.taskState,
-                                  self.ripple_thresh_decoder, self.ripple_number, self.ripple_time_bin, self.shortcut_message_sent,
+                                  self.ripple_thresh_decoder, self.ripple_number, 
+                                  self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
                                   self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                   self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                   self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
@@ -1023,6 +1047,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     #self.posterior_arm_sum = np.zeros((1,9))
                     #print('posterior arm sum, no spike loop',np.around(self.posterior_arm_sum,decimals=2))
 
+                    # add credible interval here and add to message
+                    self.spxx = np.sort(posterior)[::-1]
+                    self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
+                    #if self.msg_counter % 100 == 0:
+                    #    print('credible interval',self.crit_ind)
+
                     if spike_dec_msg is not None:
                         self.posterior_sum_timestamp = spike_dec_msg.timestamp
                     else:
@@ -1035,7 +1065,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                          self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                          self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
                                                          self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
-                                                         self.spike_count)
+                                                         self.spike_count,self.crit_ind,self.posterior_max)
 
                     self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
                                       self.current_time_bin * self.time_bin_size, time,
@@ -1047,7 +1077,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                       self.current_vel,
                                       self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                       0, self.used_next_bin, self.taskState,
-                                      self.ripple_thresh_decoder, self.ripple_number, self.ripple_time_bin, self.shortcut_message_sent,
+                                      self.ripple_thresh_decoder, self.ripple_number, 
+                                      self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
                                       self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                       self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                       self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
@@ -1174,22 +1205,22 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                               self.smooth_vel, decimals=2), 'segment = ', pos_data.segment,
                           'smooth_x', np.around(self.smooth_x, decimals=2), 'smooth_y', np.around(self.smooth_y, decimals=2))
 
-                # need to add reading in of taskState text file
-                # check new_ripple text file for taskState - needs to be updated manually
+
+                # read taskstate.txt for taskState - needs to be updated manually at begin of session
                 # 1 = first cued arm trials, 2 = content trials, 3 = second cued arm trials
-                if self.pos_msg_counter % 60 == 0:
+                # lets try 15 instead of 60
+                if self.pos_msg_counter % 15 == 0:
                   #if self.vel_pos_counter % 1000 == 0:
                       #print('thresh_counter: ',self.thresh_counter)
-                      with open('config/new_ripple_threshold.txt') as taskState_file:
+                      with open('config/taskstate.txt') as taskState_file:
                           fd = taskState_file.fileno()
                           fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
                           # read file
                           for taskState_file_line in taskState_file:
                               pass
                           new_taskState = taskState_file_line
-                      # final 1 character in line is task state
-                      self.taskState = np.int(new_taskState[11:12])
-                      print('taskState in decoder',self.taskState)
+                      self.taskState = np.int(new_taskState[0:1])
+                      #print('taskState in decoder',self.taskState)
 
                 #print(pos_data.x, pos_data.segment)
                 # TODO implement trodes cameramodule update position function

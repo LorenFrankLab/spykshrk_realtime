@@ -47,51 +47,64 @@ class LinearPositionAssignment:
 
         # with this setup max position is 136
         for arm in hardcode_armorder: # for each outer arm
-            # not using inner vs outer box for remy
-            # if inner box, do nothing
-            #if arm == 0:
-            #   temporary_variable_shift = 0
+            # # not using inner vs outer box for remy
+            # # if inner box, do nothing
+            # #if arm == 0:
+            # #   temporary_variable_shift = 0
 
-            # if outer box segments add inner box
-            #elif arm < 9 and arm > 0:
-            #   temporary_variable_shift = 4
+            # # if outer box segments add inner box
+            # #elif arm < 9 and arm > 0:
+            # #   temporary_variable_shift = 4
 
-            # replace inner and outer box with 8 parallel segments
+            # # replace inner and outer box with 8 parallel segments
 
-            # simpler way to write this using config[num_arms]
-            # 8 arms
-            #if self.config['pp_decoder']['number_arms'] == 8:
-                # toggle this for 8 vs 4 arms
-            if arm < self.config['pp_decoder']['number_arms']:
-               temporary_variable_shift = 0
+            # # simpler way to write this using config[num_arms]
+            # # 8 arms
+            # #if self.config['pp_decoder']['number_arms'] == 8:
+            #     # toggle this for 8 vs 4 arms
+            # if arm < self.config['pp_decoder']['number_arms']:
+            #    temporary_variable_shift = 0
 
-            # for first arm replace linearization_arm_length with 7 for the box
-            # old segments for box, set this to 9, new parallel segments for box, set to 8
+            # # for first arm replace linearization_arm_length with 7 for the box
+            # # old segments for box, set this to 9, new parallel segments for box, set to 8
 
-            # toggle this for 4 vs 8 arms
-            elif arm == self.config['pp_decoder']['number_arms']:
-               temporary_variable_shift = hardcode_shiftamount + 8
-               #temporary_variable_shift = hardcode_shiftamount + 8 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
+            # # toggle this for 4 vs 8 arms
+            # elif arm == self.config['pp_decoder']['number_arms']:
+            #    temporary_variable_shift = hardcode_shiftamount + 8
+            #    #temporary_variable_shift = hardcode_shiftamount + 8 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
 
-            else: # if arms 2-8, shift with gap
-               temporary_variable_shift = (hardcode_shiftamount + 12 + 
-                                           self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]])
+            # else: # if arms 2-8, shift with gap
+            #    temporary_variable_shift = (hardcode_shiftamount + 12 + 
+            #                                self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]])
 
-            # # 4 arms
-            # elif self.config['pp_decoder']['number_arms'] == 4:
-            #     if arm < 4:
-            #        temporary_variable_shift = 0
+            # # new code for tree-track maze
+            # # box length = 61 cm (12 bins)
+            # if arm < self.config['pp_decoder']['number_arms']:
+            #    temporary_variable_shift = 0
+            # elif arm == 2:
+            #     temporary_variable_shift = hardcode_shiftamount + 12
+            # elif arm == 3:
+            #     temporary_variable_shift = hardcode_shiftamount + 12 + 25 + 4
+            # elif arm == 4:
+            #     temporary_variable_shift = 12 + 10 + 4
+            # elif arm == 5:
+            #     temporary_variable_shift = 12 + 25 + 10 + 8
 
-            #     # for first arm replace linearization_arm_length with 7 for the box
-            #     # old segments for box, set this to 9, new parallel segments for box, set to 8
+            # 4 arms
+            if self.config['pp_decoder']['number_arms'] == 4:
+                if arm < 4:
+                   temporary_variable_shift = 0
 
-            #     elif arm == 4:
-            #        temporary_variable_shift = hardcode_shiftamount + 8
-            #        #temporary_variable_shift = hardcode_shiftamount + 8 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
+                # for first arm replace linearization_arm_length with 7 for the box
+                # old segments for box, set this to 9, new parallel segments for box, set to 8
 
-            #     else: # if arms 2-8, shift with gap
-            #        temporary_variable_shift = (hardcode_shiftamount + 12 + 
-            #                                    self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]])
+                elif arm == 4:
+                   temporary_variable_shift = hardcode_shiftamount + 8
+                   #temporary_variable_shift = hardcode_shiftamount + 8 + self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]]
+
+                else: # if arms 2-8, shift with gap
+                   temporary_variable_shift = (hardcode_shiftamount + 12 + 
+                                               self.shift_linear_distance_by_arm_dictionary[hardcode_armorder[arm - 1]])
 
             # # 2 arms
             # elif self.config['pp_decoder']['number_arms'] == 2:
@@ -150,32 +163,53 @@ class LinearPositionAssignment:
         # simpler way to write this: segment < config[num_arms]
         # for 8 arms
         #if self.config['pp_decoder']['number_arms'] == 8:
-        if segment < self.config['pp_decoder']['number_arms']:
-            self.assigned_pos = math.floor(segment_pos*9 + self.shift_linear_distance_by_arm_dictionary[segment])
-            if self.assigned_pos == 9:
-                self.box_correction_count += 1
-                self.assigned_pos = 8
-                #print('edge of box position binning correction')
-            if self.assigned_pos == -1:
-                self.assigned_pos = 0
-                #print('position was -1')
-            if self.box_correction_count % 1000 == 0:
-                print('edge of box pos correction count',self.box_correction_count)
-        else:
-            self.assigned_pos = math.ceil(segment_pos*12 + self.shift_linear_distance_by_arm_dictionary[segment])
+        # if segment < self.config['pp_decoder']['number_arms']:
+        #     self.assigned_pos = math.floor(segment_pos*9 + self.shift_linear_distance_by_arm_dictionary[segment])
+        #     if self.assigned_pos == 9:
+        #         self.box_correction_count += 1
+        #         self.assigned_pos = 8
+        #         #print('edge of box position binning correction')
+        #     if self.assigned_pos == -1:
+        #         self.assigned_pos = 0
+        #         #print('position was -1')
+        #     if self.box_correction_count % 1000 == 0:
+        #         print('edge of box pos correction count',self.box_correction_count)
+        # else:
+        #     self.assigned_pos = math.ceil(segment_pos*12 + self.shift_linear_distance_by_arm_dictionary[segment])
 
-        # # for 4 arms with multiple paths from home
-        # elif self.config['pp_decoder']['number_arms'] == 4:        
-        #     if segment < 4:
-        #        self.assigned_pos = math.floor(segment_pos*9 + self.shift_linear_distance_by_arm_dictionary[segment])
-        #        if self.assigned_pos == 9:
-        #            self.assigned_pos = 8
-        #            #print('edge of box position binning correction')
-        #        if self.assigned_pos == -1:
-        #            self.assigned_pos = 0
-        #            #print('position was -1')
-        #     else:
-        #        self.assigned_pos = math.ceil(segment_pos*12 + self.shift_linear_distance_by_arm_dictionary[segment])
+        # # new code for tree track
+        # if segment < self.config['pp_decoder']['number_arms']:
+        #     self.assigned_pos = math.floor(segment_pos*13 + self.shift_linear_distance_by_arm_dictionary[segment])
+        #     if self.assigned_pos == 13:
+        #         self.box_correction_count += 1
+        #         self.assigned_pos = 13
+        #         #print('edge of box position binning correction')
+        #     if self.assigned_pos == -1:
+        #         self.assigned_pos = 0
+        #         #print('position was -1')
+        #     if self.box_correction_count % 1000 == 0:
+        #         print('edge of box pos correction count',self.box_correction_count)
+        # elif segment == 2:
+        #     self.assigned_pos = math.ceil(segment_pos*10 + self.shift_linear_distance_by_arm_dictionary[segment])
+        # elif segment == 3:
+        #     self.assigned_pos = math.ceil(segment_pos*10 + self.shift_linear_distance_by_arm_dictionary[segment])
+        # elif segment == 4:
+        #     self.assigned_pos = math.ceil(segment_pos*15 + self.shift_linear_distance_by_arm_dictionary[segment])
+        # elif segment == 5:
+        #     self.assigned_pos = math.ceil(segment_pos*15 + self.shift_linear_distance_by_arm_dictionary[segment])
+
+        # for 4 arms with multiple paths from home
+        if self.config['pp_decoder']['number_arms'] == 4:        
+            if segment < 4:
+               self.assigned_pos = math.floor(segment_pos*9 + self.shift_linear_distance_by_arm_dictionary[segment])
+               if self.assigned_pos == 9:
+                   self.assigned_pos = 8
+                   #print('edge of box position binning correction')
+               if self.assigned_pos == -1:
+                   self.assigned_pos = 0
+                   #print('position was -1')
+            else:
+               self.assigned_pos = math.ceil(segment_pos*12 + self.shift_linear_distance_by_arm_dictionary[segment])
 
         # # 4 arms with single segment between home and wait
         # if segment == 0:
