@@ -300,6 +300,19 @@ class RippleFilter(rt_logging.LoggingClass):
 
             y = abs(rd)
 
+            # show type of session
+            if self.lfp_display_counter == 0:
+                print('session type:',self.session_type)
+
+            # set mean and std to match values from config
+            if self.lfp_display_counter == 0 and self.session_type == 'sleep':
+                self.ripple_mean = 0.0
+                self.ripple_std = 0.0
+                print('sleep, initial LFP mean:',self.ripple_mean,'std:',self.ripple_std)            
+            elif self.lfp_display_counter == 0:
+                self.ripple_mean = self.custom_baseline_mean
+                self.ripple_std = self.custom_baseline_std
+                print('run, initial LFP mean:',self.ripple_mean,'std:',self.ripple_std)
             # calculate and display lfp baseline
             self.ripple_mean += (y - self.ripple_mean) / self.param.samp_divisor
             self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.samp_divisor
@@ -326,19 +339,24 @@ class RippleFilter(rt_logging.LoggingClass):
                     for rip_thresh_file_line in ripple_threshold_file:
                         pass
                     new_ripple_threshold = rip_thresh_file_line
-                # first three characters are ripple_thresh
-                self.conditioning_ripple_threshold = np.int(new_ripple_threshold[0:3])/10
-                # next three after space are normal thresh (content)
-                self.param.ripple_threshold = np.int(new_ripple_threshold[4:7])/10
+
+                if len(new_ripple_threshold) == 29:
+                    # first three characters are ripple_thresh
+                    self.conditioning_ripple_threshold = np.int(new_ripple_threshold[0:3])/10
+                    # next three after space are normal thresh (content)
+                    self.param.ripple_threshold = np.int(new_ripple_threshold[4:7])/10
 
                 # only print for one ripple process, rank 3
                 if rank == 3:
                     print('conditioning ripple threshold = ',self.conditioning_ripple_threshold,
                           'content ripple threshold = ',self.param.ripple_threshold)
 
-            if not self.stim_enabled:
-                self.ripple_mean += (y - self.ripple_mean) / self.param.samp_divisor
-                self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.samp_divisor
+            if self.session_type == 'sleep':
+            #if not self.stim_enabled:
+                # note this is always running! the plan was to only have this run during sleep...
+                # looks like mean and sd are overall a bit higher than at the end of the sleep session
+                self.ripple_mean += (y - self.ripple_mean) / self.param.baseline_window_timestamp
+                self.ripple_std += (abs(y - self.ripple_mean) - self.ripple_std) / self.param.baseline_window_timestamp
                 if not self.param.use_custom_baseline:  # only update the threshold if we're not using a custom baseline
                     self.current_thresh = self.ripple_mean + self.ripple_std * self.param.ripple_threshold
                     # print('ntrode', crf.nTrodeId, 'mean', crf.rippleMean)

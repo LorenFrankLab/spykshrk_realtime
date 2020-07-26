@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "fievel_19_4_19tet_6_8",
+        "prefix": "charlie_7_19_run3",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -29,18 +29,19 @@
  
     "ripple_conditioning": {
         "session_type": "run",
+        "instructive": 1,
         "posterior_sum_threshold": 0.5,
         "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
         "post_sum_sliding_window": 11,
         "ripple_detect_velocity": 4,
         "spike_count_window_sec": 300,
-        "previous_spike_count_avg": 1.133,
-        "previous_spike_count_std": 0.712,
+        "previous_spike_count_avg": 1.047,
+        "previous_spike_count_std": 0.78,
         "replay_target_arm": 1,
+        "replay_non_target_arm": 2,
         "condition_rip_thresh": 100,
         "shortcut_msg_lockout": 30000
-
     },
 
     "ripple": {
@@ -49,7 +50,7 @@
             "rip_coeff2": 0.2,
             "ripple_threshold": 4,
             "baseline_window_timestamp": 450000,
-            "n_above_thresh": 4,
+            "n_above_thresh": 2,
             "lockout_time": 6000,
             "posterior_lockout_time": 0,
             "ripple_conditioning_lockout_time": 0,
@@ -62,50 +63,49 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
-            " 5 ": 6.79 , 
-            " 7 ": 6.18 , 
-            " 15 ": 4.7 , 
-            " 3 ": 5.06 , 
-            " 1 ": 7.36 , 
-            " 6 ": 7.74 , 
-            " 14 ": 6.89 , 
-            " 19 ": 9.39 , 
-            " 29 ": 7.16 , 
-            " 9 ": 7.33 , 
-            " 17 ": 7.83 , 
-            " 27 ": 9.39 , 
-            " 8 ": 7.05 , 
-            " 16 ": 7.35 , 
-            " 24 ": 9.16 , 
-            " 11 ": 8.3 , 
-            " 18 ": 9.41 , 
-            " 28 ": 8.35 , 
-            " 20 ": 9.26 , 
-            " 25 ": 6.22
+            " 1 ": 6.04 , 
+            " 8 ": 7.46 , 
+            " 17 ": 4.32 , 
+            " 26 ": 5.67 , 
+            " 4 ": 8.0 , 
+            " 2 ": 7.22 , 
+            " 3 ": 8.21 , 
+            " 12 ": 6.52 , 
+            " 9 ": 6.87 , 
+            " 24 ": 6.38 , 
+            " 19 ": 4.39 , 
+            " 11 ": 6.25 , 
+            " 29 ": 5.31 , 
+            " 27 ": 4.46 , 
+            " 22 ": 6.56 , 
+            " 28 ": 5.58 , 
+            " 7 ": 8.04 , 
+            " 14 ": 6.93 , 
+            " 25 ": 5.12 , 
+            " 30 ": 6.56 
 
         },
         "CustomRippleBaselineStdMessage": {
-            " 5 ": 4.49 ,
-            " 7 ": 4.05 ,
-            " 15 ": 3.04 ,
-            " 3 ": 3.19 ,
-            " 1 ": 4.83 ,
-            " 6 ": 5.12 ,
-            " 14 ": 4.62 ,
-            " 19 ": 6.22 ,
-            " 29 ": 4.69 ,
-            " 9 ": 4.93 ,
-            " 17 ": 5.12 ,
-            " 27 ": 6.46 ,
-            " 8 ": 4.76 ,
-            " 16 ": 4.74 ,
-            " 24 ": 6.25 ,
-            " 11 ": 5.68 ,
-            " 18 ": 6.32 ,
-            " 28 ": 5.7 ,
-            " 20 ": 6.25 ,
-            " 25 ": 4.12
-
+            " 1 ": 3.83 ,
+            " 8 ": 5.02 ,
+            " 17 ": 2.74 ,
+            " 26 ": 3.7 ,
+            " 4 ": 5.37 ,
+            " 2 ": 4.71 ,
+            " 3 ": 5.45 ,
+            " 12 ": 4.37 ,
+            " 9 ": 4.47 ,
+            " 24 ": 4.16 ,
+            " 19 ": 2.78 ,
+            " 11 ": 4.12 ,
+            " 29 ": 3.46 ,
+            " 27 ": 2.78 ,
+            " 22 ": 4.2 ,
+            " 28 ": 3.68 ,
+            " 7 ": 5.47 ,
+            " 14 ": 4.65 ,
+            " 25 ": 3.28 ,
+            " 30 ": 4.39 
         }
     }, 
 
@@ -118,22 +118,27 @@
             "upper": 1024,
             "interval": 1
         },
-        "RStar_edge_length_factor": 3,
+        "RStar_edge_length_factor": 6,
 
         "position": {
             "lower": 0,
-            "upper": 137,
-            "bins": 137,
-            "arm_pos": [[0, 136]]
+            "upper": 73,
+            "bins": 73,
+            "arm_pos": [[0, 72]]
         },
         "position_kernel": {
             "std": 5
         },
         "vel": 4,
-        "spk_amp": 150,
+        "spk_amp": 120,
+        "noise_max_amp": 1500,
         "dead_channels": {
-            "6": 3,
-            "17": 3
+            "3": [2,3],
+            "7": [2,3],
+            "8": 3,
+            "24": 3,
+            "9": 3,
+            "28": [2,3]
         },
         "occupancy": [[0]]
 
@@ -146,7 +151,7 @@
     },
 
     "pp_decoder": {
-        "number_arms": 8,
+        "number_arms": 4,
         "bin_size": 150,
         "trans_mat_uniform_gain": 0.001,
         "trans_mat_smoother_std": 3
@@ -155,7 +160,7 @@
     "trodes_network": {
         "address" : "tcp://127.0.0.1",
         "port": 49152,
-        "decoding_tetrodes": [1,3,5,6,7,8,9,11,14,15,16,17,18,19,20,24,27,28,29],
-        "ripple_tetrodes": [1,3,5,6,7,8,9,11,14,15,16,17,18,19,20,24,27,28,29,25]
+        "decoding_tetrodes": [2,3,4,6,7,8,9,11,12,14,16,17,19,22,24,25,28,29,30],
+        "ripple_tetrodes": [1,2,3,4,7,8,9,11,12,14,17,19,22,24,25,26,27,28,29,30]
     }
 }

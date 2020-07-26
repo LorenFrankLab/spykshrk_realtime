@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "remy_decoder_19tet_3_30_check_again",
+        "prefix": "remy_20_2_19tet_6_6_test",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -26,26 +26,46 @@
     "trodes": {
         "voltage_scaling_factor": 0.195
     },
-
+ 
     "ripple_conditioning": {
         "display_baseline": false,
         "posterior_sum_threshold": 0.5,
         "posterior_sum_rip_only": false,
         "ripple_detection_shift": 2100,
         "post_sum_sliding_window": 11,
+<<<<<<< HEAD
         "ripple_detect_velocity": 5
+=======
+        "ripple_detect_velocity": 4,
+        "spike_count_window_sec": 300,
+        "previous_spike_count_avg": 2.06,
+        "previous_spike_count_std": 1.43,
+        "replay_target_arm": 1,
+        "condition_rip_thresh": 100,
+        "shortcut_msg_lockout": 30000
+
+>>>>>>> 9e997f3d8da769fabfb6e0cc35c06eb6cd7ea685
     },
 
     "ripple": {
         "RippleParameterMessage": {
             "rip_coeff1": 1.2,
             "rip_coeff2": 0.2,
+<<<<<<< HEAD
             "ripple_threshold": 5,
             "samp_divisor": 10000,
             "n_above_thresh": 2,
             "lockout_time": 4500,
             "posterior_lockout_time": 750,
             "ripple_conditioning_lockout_time": 750,
+=======
+            "ripple_threshold": 4,
+            "baseline_window_timestamp": 450000,
+            "n_above_thresh": 4,
+            "lockout_time": 6000,
+            "posterior_lockout_time": 0,
+            "ripple_conditioning_lockout_time": 0,
+>>>>>>> 9e997f3d8da769fabfb6e0cc35c06eb6cd7ea685
             "detect_no_ripples": false,
             "detect_no_ripple_time": 60000,
             "dio_gate": false,
@@ -55,6 +75,7 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
+<<<<<<< HEAD
             "4": 7.83,
             "5": 12000,
             "6": 12.42,
@@ -111,6 +132,52 @@
             "28": 12000,
             "29": 4.06,
             "30": 12000
+=======
+            " 17 ": 8.73 , 
+            " 13 ": 9.18 , 
+            " 19 ": 7.65 , 
+            " 22 ": 8.5 , 
+            " 9 ": 10.97 , 
+            " 12 ": 10.04 , 
+            " 14 ": 6.54 , 
+            " 6 ": 13.93 , 
+            " 11 ": 6.57 , 
+            " 24 ": 12.77 , 
+            " 23 ": 14.12 , 
+            " 21 ": 11.61 , 
+            " 10 ": 8.71 , 
+            " 4 ": 8.89 , 
+            " 2 ": 16.33 , 
+            " 20 ": 9.27 , 
+            " 29 ": 7.01 , 
+            " 26 ": 10.08 , 
+            " 15 ": 6.04 , 
+            " 30 ": 13.6
+
+        },
+        "CustomRippleBaselineStdMessage": {
+            " 17 ": 5.72 ,
+            " 13 ": 6.28 ,
+            " 19 ": 5.07 ,
+            " 22 ": 5.61 ,
+            " 9 ": 7.18 ,
+            " 12 ": 6.93 ,
+            " 14 ": 4.49 ,
+            " 6 ": 9.07 ,
+            " 11 ": 4.34 ,
+            " 24 ": 8.37 ,
+            " 23 ": 9.11 ,
+            " 21 ": 8.18 ,
+            " 10 ": 5.96 ,
+            " 4 ": 5.96 ,
+            " 2 ": 10.59 ,
+            " 20 ": 6.43 ,
+            " 29 ": 4.58 ,
+            " 26 ": 6.87 ,
+            " 15 ": 4.04 ,
+            " 30 ": 9.45
+
+>>>>>>> 9e997f3d8da769fabfb6e0cc35c06eb6cd7ea685
         }
     },
 
