@@ -259,15 +259,27 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, velthresh=4, use_
     ## run replay classifier
     if decode_all:
         posinfo_at_likelihood_times = binned_linear_pos.get_irregular_resampled(decoder.likelihoods)
-        velmask = posinfo_at_likelihood_times['linvel_flat']>velocity_thresh_for_enc_dec
+        #velmask = posinfo_at_likelihood_times['linvel_flat']>velocity_thresh_for_enc_dec
+        velmask = None  # to apply classifier to entire ep, not by chunk
     else:
         velmask = None
 
     time_started = datetime.now()
     ## continuous trans_mat has small offset = 0 (no jumping)
     sungod_no_offset = sungod_util.calc_sungod_trans_mat(encode_settings, decode_settings, uniform_gain=0)
-    causal_state1, causal_state2, causal_state3, acausal_state1, acausal_state2, acausal_state3, trans_mat_dict = sungod_util.decode_with_classifier(
-                    decoder.likelihoods, sungod_no_offset, encoder.occupancy, discrete_tm_val, velmask)    
+
+    # for all 3 states:
+    #causal_state1, causal_state2, causal_state3, acausal_state1, acausal_state2, acausal_state3, trans_mat_dict = sungod_util.decode_with_classifier(
+    #                decoder.likelihoods, sungod_no_offset, encoder.occupancy, discrete_tm_val, velmask)  
+
+    # for just continuous vs fragemnted
+    causal_state1, causal_state2, acausal_state1, acausal_state2, trans_mat_dict = sungod_util.decode_with_classifier_2state(
+                    decoder.likelihoods, sungod_no_offset, encoder.occupancy, discrete_tm_val, velmask)  
+    # duplicate an empty state so that we can use the same save function (3rd state is just zeros)
+    acausal_state3 = acausal_state1.copy()
+    acausal_state3.loc[:] = 0
+
+
     time_finished = datetime.now()
 
     print('Classifier started at %s'%str(time_started))
