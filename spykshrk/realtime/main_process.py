@@ -309,6 +309,10 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.posterior_sum_timestamps = np.zeros((self.config['ripple_conditioning']['post_sum_sliding_window'],1))
         self.post_sum_sliding_window_actual = 0
 
+        # used to pring out number of replays during session
+        self.arm1_replay_counter = 0
+        self.arm2_replay_counter = 0
+
         #if self.config['datasource'] == 'trodes':
         #    self.networkclient = MainProcessClient("SpykshrkMainProc", config['trodes_network']['address'],config['trodes_network']['port'], self.config)
         #self.networkclient.initializeHardwareConnection()
@@ -395,7 +399,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                   timestamp, time, self._lockout_count, self._in_lockout,
                                   num_above, self.big_rip_message_sent)
                 self._lockout_count += 1
-                print('ripple lockout ended. time:',np.around(timestamp/30,decimals=2))
+                #print('ripple lockout ended. time:',np.around(timestamp/30,decimals=2))
 
             # end lockout for posterior sum
             if self._posterior_in_lockout and (timestamp > self._posterior_last_lockout_timestamp + 
@@ -406,7 +410,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                   timestamp, time, self._lockout_count, self._posterior_in_lockout,
                                   num_above, self.big_rip_message_sent)
                 #self._lockout_count += 1
-                print('posterior sum lockout ended. time:',np.around(timestamp/30,decimals=2))
+                #print('posterior sum lockout ended. time:',np.around(timestamp/30,decimals=2))
 
             # end lockout for large ripples
             # note: currently only one variable for counting both lockouts
@@ -488,6 +492,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 # i think we need no lockout here because it will mask large ripples
                 # so need to come up with a better way to trigger light - turn off for now
                 print('detection of ripple for content, lfp timestamp',timestamp,np.around(timestamp/30,decimals=2))
+                print('arm1 replays:',self.arm1_replay_counter,'arm2 replays:',self.arm2_replay_counter)
                 #print('sent light message based on ripple thresh',time,timestamp)
                 #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['trigger(15);\n'])
                     
@@ -542,12 +547,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         networkclient = networkclient
         time = MPI.Wtime()
 
-        print('max posterior in arm',arm,np.around(self.norm_posterior_arm_sum[arm],decimals=2),
-              'posterior sum: ',np.around(self.norm_posterior_arm_sum.sum(),decimals=2),
-              'position ',np.around(self.linearized_position,decimals=2),
-              'posterior bins in ripple ',self.posterior_time_bin,'ending bin timestamp',self.bin_timestamp,
-              'lfp timestamp',self.lfp_timestamp,'delay',(self.lfp_timestamp-self.bin_timestamp)/30,
-              'spike count',self.posterior_spike_count,'sliding window',self.post_sum_sliding_window_actual)
+        print('max posterior in arm:',arm,np.around(self.norm_posterior_arm_sum[arm],decimals=2),
+              'posterior sum:',np.around(self.norm_posterior_arm_sum.sum(),decimals=2),
+              'position:',np.around(self.linearized_position,decimals=2),
+              'posterior bins in ripple:',self.posterior_time_bin,'ending bin timestamp:',self.bin_timestamp,
+              'lfp timestamp:',self.lfp_timestamp,'delay:',np.around((self.lfp_timestamp-self.bin_timestamp)/30,decimals=1),
+              'spike count:',self.posterior_spike_count,'sliding window:',self.post_sum_sliding_window_actual)
         #self.shortcut_message_arm = np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0]
         self.shortcut_message_arm = arm
 
@@ -561,10 +566,10 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             #print('string for statescript:',statescript_command)
             networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', [statescript_command])
             #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['replay_arm = 1;\ntrigger(15);\n'])
-            print('sent StateScript message for arm',arm,'replay in ripple ',self._lockout_count)
+            print('sent StateScript message for arm',arm,'replay in ripple',self._lockout_count)
             
             # arm replay counters, only active at wait well and adds to current counter and sets other arms to 0
-            print('arm replay count: ',self.arm_replay_counter)
+            print('arm replay count:',self.arm_replay_counter)
             self.shortcut_message_sent = True
 
             self.ripple_end = 1
@@ -742,30 +747,33 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                           self.norm_posterior_arm_sum[6],self.norm_posterior_arm_sum[7],self.norm_posterior_arm_sum[8])
 
                 # add filter to only send message after 15 msec within ripple
+                # 3-23: remove 15 msec delay
                 # replay detection of arm 1
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 1  and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 1:
                     # function to send statescript message and save STIM_MESSAGE record
                     self.posterior_sum_statescript_message(1,networkclient)
+                    self.arm1_replay_counter += 1
                 # replay detection of arm 2
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 2 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 2:
                     self.posterior_sum_statescript_message(2,networkclient)
+                    self.arm2_replay_counter += 1
                 # replay detection of arm 3
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 3 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 3:
                     self.posterior_sum_statescript_message(3,networkclient)
                 # replay detection of arm 4
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 4 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 4:
                     self.posterior_sum_statescript_message(4,networkclient)
                 # replay detection of arm 5
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 5 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 5:
                     self.posterior_sum_statescript_message(5,networkclient)
                 # replay detection of arm 6
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 6 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 6:
                     self.posterior_sum_statescript_message(6,networkclient)
                 # replay detection of arm 7
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 7 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 7:
                     self.posterior_sum_statescript_message(7,networkclient)
                 # replay detection of arm 8
-                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 8 and self.posterior_time_bin>3:
+                elif np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0] == 8:
                     self.posterior_sum_statescript_message(8,networkclient)
 
             # no maximum location for whole ripple

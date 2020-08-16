@@ -1,4 +1,5 @@
 import os
+import fcntl
 import struct
 import numpy as np
 import time
@@ -185,6 +186,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_timestamp = 0
         self.spike_elec_grp_id = 0
 
+        # taskState variable for adding spikes to encoding model
+        self.taskState = 1
+
         time = MPI.Wtime()
 
         #start spike sent timer
@@ -241,6 +245,21 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 self.spk_counter += 1
 
+                # first find dead channels from spykshrk config file and replace data with 0s
+                if str(datapoint.elec_grp_id) in self.config['encoder']['dead_channels']:
+                    #print('dead channel',datapoint.elec_grp_id)
+                    dead_channel = self.config['encoder']['dead_channels'].get(str(datapoint.elec_grp_id))
+                    if self.spk_counter == 1:
+                        print('tetrode:',datapoint.elec_grp_id,'dead channel:',dead_channel)                    
+                    #print('channel is',dead_channel)
+                    #print('data is',datapoint.data[dead_channel])
+                    # zero out dead channel
+                    datapoint.data[dead_channel] = datapoint.data[dead_channel]*0
+                    #print('zeroed data is',datapoint.data[dead_channel])
+                #for key, value in self.config['encoder']['dead_channels'].items():
+                #    print('dead channel list',key,value)
+                #print('tet number',datapoint.elec_grp_id)
+
                 # this line calculates the mark for each channel (max of the 40 voltage values)
                 # NO. this does not!!
                 # it should be the max on the highest channel and then the values of the other three in that bin
@@ -250,8 +269,10 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #print('old mark',old_amp_marks)
                 #print('input voltage',datapoint.data)
                 #print('mark',amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3])
+
                 # new method - take 4 values from single bin with highest peak
                 max_0 = max(datapoint.data[0])
+                #print('zeroed max',max_0,datapoint.elec_grp_id)
                 max_1 = max(datapoint.data[1])
                 max_2 = max(datapoint.data[2])
                 max_3 = max(datapoint.data[3])
@@ -313,9 +334,10 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                     # this adds the current spike to the R Star Tree
                     # to turn off adding spike, comment out "new_mark" below
+                    # added switch from config file: taskState == 1 (only add spikes if in first cued trials)
                     # can also add a secondary spike amplitude filter here
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
-                    if abs(self.current_vel) >= self.config['encoder']['vel']:
+                    if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 
@@ -352,6 +374,22 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
             if isinstance(datapoint, CameraModulePoint):
                 #NOTE (MEC, 9-1-19): we need to include encoding velocity when calling update_covariate
                 self.pos_counter += 1
+
+                # check new_ripple text file for taskState - needs to be updated manually
+                # 1 = first cued arm trials, 2 = content trials, 3 = second cued arm trials
+                if self.pos_counter % 600 == 0:
+                  #if self.vel_pos_counter % 1000 == 0:
+                      #print('thresh_counter: ',self.thresh_counter)
+                      with open('config/new_ripple_threshold.txt') as taskState_file:
+                          fd = taskState_file.fileno()
+                          fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                          # read file
+                          for taskState_file_line in taskState_file:
+                              pass
+                          new_taskState = taskState_file_line
+                      # final 1 character in line is task state
+                      self.taskState = new_taskState[11:12]
+                      print('task state =',self.taskState)
 
                 # run positionassignment, pos smoothing, and velocity calculator functions
                 # currently smooth position and velocity

@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/mnt/stelmo/mcoulter/spykshrk_output/greenflash",
-        "prefix": "remy_2_20_spike_fix",
+        "prefix": "jaq_3_20_ptp_camera",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -44,7 +44,7 @@
             "n_above_thresh": 2,
             "lockout_time": 4500,
             "posterior_lockout_time": 750,
-            "ripple_conditioning_lockout_time": 750,
+            "ripple_conditioning_lockout_time": 1000,
             "detect_no_ripples": false,
             "detect_no_ripple_time": 60000,
             "dio_gate": false,
@@ -63,16 +63,16 @@
             "7": 12000,
             "8": 12000,
             "9": 12000,
-            "10": 6.9,
+            "10": 5.8,
             "11": 12000,
             "12": 12000,
-            "13": 8.2,
+            "13": 7.3,
             "14": 12000,
             "15": 12000,
             "16": 12000,
-            "17": 6.6,
+            "17": 5.3,
             "18": 12000,
-            "19": 10.9,
+            "19": 8.5,
             "20": 12000,
             "21": 12000,
             "22": 12000,
@@ -82,7 +82,7 @@
             "26": 12000,
             "27": 12000,
             "28": 12000,
-            "29": 10,
+            "29": 6.9,
             "30": 12000
         },
         "CustomRippleBaselineStdMessage": {
@@ -95,16 +95,16 @@
             "7": 12000,
             "8": 12000,
             "9": 12000,
-            "10": 4.2,
+            "10": 3.7,
             "11": 12000,
             "12": 12000,
-            "13": 5.1,
+            "13": 3.3,
             "14": 12000,
             "15": 12000,
             "16": 12000,
-            "17": 4,
+            "17": 3.3,
             "18": 12000,
-            "19": 6.8,
+            "19": 5.3,
             "20": 12000,
             "21": 12000,
             "22": 12000,
@@ -114,7 +114,7 @@
             "26": 12000,
             "27": 12000,
             "28": 12000,
-            "29": 6.4,
+            "29": 4.6,
             "30": 12000
         }
     }, 
@@ -140,7 +140,10 @@
             "std": 5
         },
         "vel": 5,
-        "spk_amp": 150
+        "spk_amp": 150,
+        "dead_channels": {
+            "4": 0
+        }
     },
 
     "decoder": "pp_decoder",

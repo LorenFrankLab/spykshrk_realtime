@@ -128,7 +128,7 @@ class TrodesDataReceiver(realtime_base.DataSourceReceiver):
             #print(self.curntrode, self.subbedntrodes)
             # if haven't gotten anything yet, curntrode = -1. if already sent all in one packet, curntrode = subbedntrodes
             if self.curntrode > 0 and self.curntrode < self.subbedntrodes:
-                #print('3')
+                #print('lfp data 1st loop',self.buf)
                 #print(curntrode)
                 #print(subbedntrodes)
                 # multiply raw LFP by voltage scaling factor for trodes amplifier (0.195) - this is specified in config file
@@ -147,7 +147,7 @@ class TrodesDataReceiver(realtime_base.DataSourceReceiver):
             byteswritten = 0
             systime = tnp.systemTimeMSecs()
             if self.datatype is datatypes.Datatypes.LFP:
-                #print('6')
+                #print('lfp data 2nd loop',self.buf)
                 self.timestamp = self.datastream.getData()
                 # Reset curntrode value. If lfp buffer is more than 1, then above code will read from buffer before reading from Trodes stream
                 self.curntrode = 0
@@ -167,7 +167,7 @@ class TrodesDataReceiver(realtime_base.DataSourceReceiver):
             elif self.datatype is datatypes.Datatypes.SPIKES:
                 self.timestamp = self.datastream.getData() #Data is [(ntrode, cluster, timestamp, [0-159 data - (i,data)] ) ]
                 # Reshape data to look like what spykshrk expects
-                #print('spikes: ',self.buf)
+                #print('spikes: ',self.buf,self.timestamp)
                 # multiply spike amplitude by voltage scaling factor for trodes amplifier (0.195) - this is specified in config file
                 d = self.buf[0][3][:,1]
                 #print('raw: ',d)
