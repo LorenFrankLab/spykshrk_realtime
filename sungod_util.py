@@ -614,6 +614,64 @@ def decode_with_classifier(likelihoods_obj, sungod_transmat, occupancy, discrete
         acausal_state3.loc[blocks==b]=acausal_posterior[:,2,:,0]
 
     return causal_state1, causal_state2, causal_state3, acausal_state1, acausal_state2, acausal_state3, trans_mat_dict
+
+def decode_with_classifier_2state(likelihoods_obj, sungod_transmat, occupancy, discrete_tm_val=.99,velmask = None):
+        
+    '''
+    '''
+    # set up ingredients for classifier
+    # remove hover state (gets incorporated into continuous)
+    num_bins = sungod_transmat.shape[0]
+    gapmask = np.ceil(np.nan_to_num(occupancy))
+    ic_tmp = gapmask * np.ones((2,num_bins)) # in all bins, 0s in all gaps, then repeat over 3 rows
+    initial_conditions = ic_tmp[:,:,np.newaxis]   # add on the extra 3rd dimension 
+    trans_mat_dict = {'continuous':sungod_transmat, 
+                      'uniform':gapmask*gapmask[:,np.newaxis]*np.ones((num_bins,num_bins))/sum(gapmask)}
+
+    all_tms = [[trans_mat_dict['continuous'],trans_mat_dict['uniform']],
+         [trans_mat_dict['uniform'],trans_mat_dict['uniform']]]
+
+    continuous_state_transition = np.stack(all_tms,axis=0)
+    discrete_state_transition = strong_diagonal_discrete(2,discrete_tm_val)  # controls how sticky the discrete state trans is
+
+    likelihoods = likelihoods_obj.drop(['num_spikes','dec_bin'],axis=1)
+
+    # initialize output structures
+    causal_state1 = likelihoods.copy()   # continuous
+    causal_state2 = likelihoods.copy()   # fragmented
+    acausal_state1 = likelihoods.copy()
+    acausal_state2 = likelihoods.copy()
+    # nan out all the values
+    causal_state1.loc[:] = 0   # continuous
+    causal_state2.loc[:] = 0   # fragmented
+    acausal_state1.loc[:] = 0
+    acausal_state2.loc[:] = 0
+
+    if velmask is None: 
+        print('using first row nans')
+        nanbins = np.isnan(likelihoods['x000'])  # use the first posbin to find nan time chunks
+        blocks = (nanbins != nanbins.shift()).cumsum()   # define each group of non-nan values as a block
+        immoblocks = np.unique(blocks.loc[~nanbins])
+
+    else:
+        print('using velmask')  #if a mask has been provided, use it to decide when to run. mask = 1 when vel>thresh; 0 otherwise
+        blocks = (velmask != velmask.shift()).cumsum()
+        immoblocks = np.unique(blocks.loc[~velmask])
+
+    # run classifier
+    for b in immoblocks:    #  iterate through non-nan blocks
+        print('running valid block '+ str(b) +' of ' + str(max(blocks)))
+        chunk = likelihoods.loc[blocks==b].fillna(0).values   # get rid of the gap nans
+        chunk_expanded = chunk[:,np.newaxis,:,np.newaxis] * np.ones((1,2,num_bins,1))   # put things in the right shape
+        causal_posterior = _causal_classify(initial_conditions, continuous_state_transition,discrete_state_transition,chunk_expanded)
+        causal_state1.loc[blocks==b]=causal_posterior[:,0,:,0]   # store posteriors for each state separately bc df is 2d only
+        causal_state2.loc[blocks==b]=causal_posterior[:,1,:,0]
+
+        acausal_posterior = _acausal_classify(causal_posterior,continuous_state_transition,discrete_state_transition)
+        acausal_state1.loc[blocks==b]=acausal_posterior[:,0,:,0]   # store posteriors for each state separately bc df is 2d only
+        acausal_state2.loc[blocks==b]=acausal_posterior[:,1,:,0]
+
+    return causal_state1, causal_state2, acausal_state1, acausal_state2, trans_mat_dict    
             
 def calc_sungod_trans_mat(encode_settings, decode_settings, uniform_gain=-1, to_power=1):
     ''' this is basically a duplication of the one in pp_clusterless; 
