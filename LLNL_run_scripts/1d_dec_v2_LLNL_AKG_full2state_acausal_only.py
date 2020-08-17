@@ -246,8 +246,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
     post2 = post1.reset_index()
     post3 = trodes2SS.convert_dan_posterior_to_xarray(post2, tetrodes, 
                                             velocity_thresh_for_enc_dec, encode_settings, decode_settings, sungod_trans_mat, order, shift_amount)
-    post3.to_netcdf(posterior_file_name)
-    print('Saved netcdf posteriors to '+posterior_file_name)
+    #post3.to_netcdf(posterior_file_name)
+    #print('Saved netcdf posteriors to '+posterior_file_name)
 
     # to export linearized position to MatLab: again convert to xarray and then save as netcdf
 
@@ -255,8 +255,8 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
     linearized_pos1 = binned_linear_pos.apply_time_event(rips, event_mask_name='ripple_grp')
     linearized_pos2 = linearized_pos1.reset_index()
     linearized_pos3 = linearized_pos2.to_xarray()
-    linearized_pos3.to_netcdf(position_file_name)
-    print('Saved netcdf linearized position to '+position_file_name)
+    #linearized_pos3.to_netcdf(position_file_name)
+    #print('Saved netcdf linearized position to '+position_file_name)
 
     #cell 16
     ## run replay classifier
