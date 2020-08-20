@@ -449,7 +449,7 @@ class OfflinePPDecoder(object):
         print("Beginning posterior calculation")
         self.recalc_posterior()
 
-        return self.likelihoods, self.posteriors_obj
+        return self.posteriors_obj
 
     def recalc_likelihood(self):
         self.likelihoods = self.calc_observation_intensity(self.observ_obj,
