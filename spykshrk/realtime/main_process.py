@@ -950,13 +950,14 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             self.velocity < self.ripple_detect_velocity):
 
             # to send a shortcut message with every ripple
-            if self.rip_cond_only and self.instructive and self.linearized_position < self.position_limit:
+            if self.rip_cond_only and not self.instructive and self.linearized_position < self.position_limit:
                 # for shortcut, each arm is assigned a different message
                 # for conditoining; trigger(14) for instructive trigger(20)
                 #networkclient.sendStateScriptShortcutMessage(14)
                 #print('sent shortcut message for any ripple')
                 #pass
-                function_nums = [21,22,23,24]
+                #function_nums = [21,22,23,24]
+                function_nums = [14]
                 shortcut_function = np.int(np.random.choice(function_nums,1)[0])
                 networkclient.sendStateScriptShortcutMessage(shortcut_function)
                 print('random statescript trigger',shortcut_function)

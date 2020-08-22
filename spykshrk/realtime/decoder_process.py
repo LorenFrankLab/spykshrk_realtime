@@ -921,6 +921,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             elif spike_time_bin > self.current_time_bin + 1:
                 # added for spike tracking
                 self.decoded_spike += 1
+
+                # check for trodes disconnect
+                if (spike_time_bin - self.current_time_bin) > 200:
+                    print('huge time gap. probably trodes disconnect')
+
             # original
             # elif spike_time_bin > self.current_time_bin:
                 # Spike is in next time bin, compute posterior based on observations, advance to tracking next time bin
@@ -1125,6 +1130,13 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.dropped_spikes % 100 == 0:
                     print('number of dropped spikes: ', self.dropped_spikes)
                 pass
+
+            # *****NEW****** if decoder is >1 sec behind (trodes disconnect, reset current time bin)
+            elif spike_time_bin+200 < self.current_time_bin and spike_dec_msg is not None:
+                print('decoder recovery after disconnect')
+                self.current_time_bin = int(math.floor(
+                        spike_dec_msg.timestamp / self.config['pp_decoder']['bin_size']))
+                spike_time_bin = self.current_time_bin                
 
             # moved this above so it only count decoded spikes
             #self.msg_counter += 1
