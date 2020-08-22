@@ -258,7 +258,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, velthresh=4, use_
     #cell 16
     ## run replay classifier
     if decode_all:
-        posinfo_at_likelihood_times = binned_linear_pos.get_irregular_resampled(decoder.likelihoods)
+        #posinfo_at_likelihood_times = binned_linear_pos.get_irregular_resampled(decoder.likelihoods)
         #velmask = posinfo_at_likelihood_times['linvel_flat']>velocity_thresh_for_enc_dec
         velmask = None  # to apply classifier to entire ep, not by chunk
     else:
@@ -288,7 +288,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out, velthresh=4, use_
     #cell 17
     ## save classifier output
     base_name = os.path.join(path_out, rat_name + '_' + day_ep + '_shuffle_' + str(shift_amount) + '_posterior_')
-    fname = 'acausalv2'+suffix
+    fname = 'acausalv2_full2state'+suffix
     trodes2SS.convert_save_classifier(base_name, fname, acausal_state1, acausal_state2, acausal_state3, tetrodes, decoder.likelihoods,
                                       encode_settings, decode_settings, rips, velocity_thresh_for_enc_dec, velocity_buffer, sungod_no_offset, order, shift_amount)
 
