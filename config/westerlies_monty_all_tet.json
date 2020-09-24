@@ -10,13 +10,13 @@
     },
 
     "rank_settings": {
-        "enable_rec": [0, 1,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
+        "enable_rec": [0,1,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         "enable_profiler": [0, 1, 2, 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]
     },
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "monty_8_21_run3",
+        "prefix": "monty_playback_9_4_run4_0",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -31,13 +31,13 @@
         "session_type": "run",
         "instructive": 0,
         "posterior_sum_threshold": 0.5,
-        "other_arm_threshold": 0.2,
+        "other_arm_threshold": 0.15,
         "posterior_sum_rip_only": false,
         "post_sum_sliding_window": 11,
         "ripple_detect_velocity": 4,
         "spike_count_window_sec": 300,
-        "previous_spike_count_avg": 1.443,
-        "previous_spike_count_std": 0.995,
+        "previous_spike_count_avg": 1.031,
+        "previous_spike_count_std": 0.771,
         "replay_target_arm": 4,
         "replay_non_target_arm": 1,
         "condition_rip_thresh": 100,
@@ -63,49 +63,49 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
-            " 8 ": 5.11 , 
-            " 14 ": 5.32 , 
-            " 21 ": 6.55 , 
-            " 30 ": 6.32 , 
-            " 1 ": 8.31 , 
-            " 10 ": 5.97 , 
-            " 15 ": 8.44 , 
-            " 23 ": 6.51 , 
-            " 2 ": 7.01 , 
-            " 6 ": 6.73 , 
-            " 3 ": 7.07 , 
-            " 11 ": 7.09 , 
-            " 16 ": 6.64 , 
-            " 13 ": 7.0 , 
-            " 12 ": 5.58 , 
-            " 17 ": 6.11 , 
-            " 18 ": 6.47 , 
-            " 26 ": 7.26 , 
-            " 27 ": 7.77 , 
-            " 28 ": 6.43 
+            " 8 ": 5.21 , 
+            " 14 ": 5.14 , 
+            " 21 ": 6.08 , 
+            " 30 ": 6.35 , 
+            " 1 ": 6.39 , 
+            " 10 ": 5.54 , 
+            " 15 ": 7.27 , 
+            " 23 ": 5.45 , 
+            " 6 ": 6.25 , 
+            " 3 ": 6.97 , 
+            " 13 ": 6.54 , 
+            " 18 ": 5.85 , 
+            " 28 ": 5.53 , 
+            " 12 ": 5.55 , 
+            " 17 ": 5.19 , 
+            " 27 ": 6.16 , 
+            " 2 ": 5.11 , 
+            " 11 ": 6.69 , 
+            " 16 ": 6.0 , 
+            " 26 ": 6.9 
 
         },
         "CustomRippleBaselineStdMessage": {
-            " 8 ": 3.21 ,
-            " 14 ": 3.32 ,
-            " 21 ": 4.08 ,
+            " 8 ": 3.3 ,
+            " 14 ": 3.25 ,
+            " 21 ": 3.78 ,
             " 30 ": 3.87 ,
-            " 1 ": 5.42 ,
-            " 10 ": 3.84 ,
-            " 15 ": 5.43 ,
-            " 23 ": 4.07 ,
-            " 2 ": 4.51 ,
-            " 6 ": 4.34 ,
-            " 3 ": 4.51 ,
-            " 11 ": 4.65 ,
-            " 16 ": 4.16 ,
-            " 13 ": 4.56 ,
-            " 12 ": 3.55 ,
-            " 17 ": 3.78 ,
-            " 18 ": 4.07 ,
-            " 26 ": 4.53 ,
-            " 27 ": 4.76 ,
-            " 28 ": 3.98 
+            " 1 ": 4.08 ,
+            " 10 ": 3.57 ,
+            " 15 ": 4.69 ,
+            " 23 ": 3.41 ,
+            " 6 ": 4.03 ,
+            " 3 ": 4.38 ,
+            " 13 ": 4.25 ,
+            " 18 ": 3.71 ,
+            " 28 ": 3.43 ,
+            " 12 ": 3.56 ,
+            " 17 ": 3.22 ,
+            " 27 ": 3.83 ,
+            " 2 ": 3.21 ,
+            " 11 ": 4.34 ,
+            " 16 ": 3.74 ,
+            " 26 ": 4.34 
         }
     }, 
 
@@ -129,13 +129,16 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 4,
-        "spk_amp": 90,
-        "noise_max_amp": 1500,
+        "vel": 0,
+        "spk_amp": 100,
+        "noise_max_amp": 1000,
         "dead_channels": {
             "3": [3],
-            "17": [3],
-            "26": [3]
+            "26": [3],
+            "23": [1,2],
+            "21": [2],
+            "1": [2],
+            "4": [2]
         },
         "occupancy": [[0]]
 
@@ -149,7 +152,7 @@
 
     "pp_decoder": {
         "number_arms": 4,
-        "bin_size": 150,
+        "bin_size": 180,
         "trans_mat_uniform_gain": 0.001,
         "trans_mat_smoother_std": 3
     },
@@ -157,7 +160,7 @@
     "trodes_network": {
         "address" : "tcp://127.0.0.1",
         "port": 49152,
-        "decoding_tetrodes": [1,2,3,6,8,9,10,11,12,13,15,16,17,18,21,26,27,28,30],
+        "decoding_tetrodes": [6,7,1,2,3,8,9,10,11,12,13,15,16,18,23,26,27,28,29,21,30],
         "ripple_tetrodes": [1,2,3,6,8,10,11,12,13,14,15,16,17,18,21,23,26,27,28,30]
     }
 }

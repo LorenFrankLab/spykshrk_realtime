@@ -290,7 +290,7 @@ class VelocityCalculator:
 
         i = 0
         tmpind = 0
-        cmperpx = 0.2
+        cmperpx = 0.166
 
         self.x_pos[self.x_ind] = x
         #print(self.x_pos)
@@ -316,7 +316,7 @@ class VelocityCalculator:
 
         i = 0
         tmpind = 0
-        cmperpx = 0.2
+        cmperpx = 0.166
 
         self.y_pos[self.y_ind] = y
 
@@ -339,7 +339,7 @@ class VelocityCalculator:
         tmpind = 0
         #need to bring in network.pxpercm from trodes
         #cmperpx = 1/network.pxpercm
-        cmperpx = 0.2
+        cmperpx = 0.166
 
         # note: for remy cmperpx should be 0.2
         # it seems like the speed is still pretty high with jittering of headstage...
@@ -381,7 +381,7 @@ class VelocityCalculator:
         #tmpind = 0
         #need to bring in network.pxpercm from trodes
         #cmperpx = 1/network.pxpercm
-        cmperpx = 0.2
+        cmperpx = 0.166
 
         # note: for remy cmperpx should be 0.2
         # it seems like the speed is still pretty high with jittering of headstage...

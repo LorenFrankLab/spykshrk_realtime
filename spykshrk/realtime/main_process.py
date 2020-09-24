@@ -238,11 +238,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                      ['bin_timestamp', 'spike_timestamp', 'lfp_timestamp', 'time',
                                       'shortcut_message_sent', 'ripple_number', 'posterior_time_bin', 'delay', 'velocity',
                                       'real_pos','spike_count', 'spike_count_base','taskState',
-                                      'posterior_max_arm', 'content_threshold','ripple_end',
+                                      'posterior_max_arm', 'content_threshold','ripple_end','credible_int',
                                       'max_arm_repeats', 'box', 'arm1', 'arm2', 'arm3', 'arm4', 'arm5', 'arm6', 'arm7', 'arm8']],
                          rec_formats=['Iii',
                                       'Idiiddi',
-                                      'IIidiiidddidiidiiddddddddd'])
+                                      'IIidiiidddidiidididdddddddd'])
         # NOTE: for binary files: I,i means integer, d means decimal
 
         self.rank = rank
@@ -349,6 +349,10 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.spk_count_avg = np.zeros((1,self.spk_count_avg_history))
         self.spike_count = 0
 
+        # credible interval
+        self.credible_window = np.zeros((1,6))
+        self.credible_avg = 0
+
         # used to pring out number of replays during session
         self.arm1_replay_counter = 0
         self.arm2_replay_counter = 0
@@ -367,6 +371,23 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # instructive task
         self.instructive = self.config['ripple_conditioning']['instructive']
         self.position_limit = 1
+
+        # make arm_coords conditional on number of arms
+        self.number_arms = self.config['pp_decoder']['number_arms']
+        if self.number_arms == 8:
+            self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+                                   77, 88], [93, 104], [109, 120], [125, 136]])
+        elif self.number_arms == 4:
+            self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        elif self.number_arms == 2:
+            #sun god
+            #self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+            #tree track
+            self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+
+        self.max_pos = self.arm_coords[-1][-1] + 1
+        self.pos_bins = np.arange(0, self.max_pos, 1)
+        self.pos_trajectory = np.zeros((1,self.max_pos))
 
         # if self.config['datasource'] == 'trodes':
         #    self.networkclient = MainProcessClient("SpykshrkMainProc", config['trodes_network']['address'],config['trodes_network']['port'], self.config)
@@ -664,7 +685,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             # this should be for conditioning
             if (self.taskState == 2 and self.shortcut_message_arm == self.replay_target_arm and
                 (self.lfp_timestamp > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
-                and not self.rip_cond_only and self.shortcut_msg_on and not self.instructive):
+                and not self.rip_cond_only and self.shortcut_msg_on and not self.instructive
+                and self.crit_ind < 40):
                 # NOTE: we can now replace this with the actual shortcut message!
                 networkclient.sendStateScriptShortcutMessage(14)
                 print('conditoning: statescript trigger 14')
@@ -744,7 +766,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                               self._lockout_count, self.posterior_time_bin,
                               (self.lfp_timestamp - self.bin_timestamp) / 30, self.velocity,self.linearized_position,
                               self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
-                              self.shortcut_message_arm, self.posterior_arm_threshold, self.ripple_end, self.max_arm_repeats,
+                              self.shortcut_message_arm, self.posterior_arm_threshold, self.ripple_end, 
+                              self.credible_avg, self.max_arm_repeats,
                               self.norm_posterior_arm_sum[0], self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
                               self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], self.norm_posterior_arm_sum[5],
                               self.norm_posterior_arm_sum[6], self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
@@ -821,12 +844,13 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self.rip_cond_only = np.int(new_posterior_threshold[18:19])
                 self.shortcut_msg_on = np.int(new_posterior_threshold[20:21])
                 self._ripple_n_above_thresh = np.int(new_posterior_threshold[22:23])
-                self.replay_target_arm = np.int(new_posterior_threshold[24:25])
+                # insert conditional so replay target arm only used if not instructive
+                #self.replay_target_arm = np.int(new_posterior_threshold[24:25])
                 self.position_limit = np.int(new_posterior_threshold[26:28])
                 print('posterior threshold:', self.posterior_arm_threshold,
                     'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
                     'rip cond', self.rip_cond_only,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
-                    'position limit:',self.position_limit)
+                    'position limit:',self.position_limit,'cred interval',self.crit_ind)
 
             with open('config/taskstate.txt') as taskstate_file:
                 fd = taskstate_file.fileno()
@@ -837,6 +861,27 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 taskstate = taskstate_file_line
             self.taskState = np.int(taskstate[0:1])
             print('main taskState:',self.taskState)
+
+            #instructive trials - use reward_arm to set replay target arm
+            with open('config/target_arm.txt') as target_arm_file:
+                fd = target_arm_file.fileno()
+                fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                # read file
+                for target_arm_file_line in target_arm_file:
+                    pass
+                target_arm = target_arm_file_line
+            trodes_target_arm = np.int(target_arm[0:2])
+            #if self.instructive:
+            if trodes_target_arm == 15:
+                self.replay_target_arm = 1
+            elif trodes_target_arm == 14:
+                self.replay_target_arm = 2
+            elif trodes_target_arm == 13:
+                self.replay_target_arm = 3
+            elif trodes_target_arm == 12:
+                self.replay_target_arm = 4                
+            print('instructive target arm:',self.replay_target_arm)
+
 
             # this sort of works - not sure if it happens at very beginning though
             # turn off for now - currently it just runs all the time
@@ -930,6 +975,10 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.spk_count_avg[0,np.mod(self.running_post_sum_counter,
                                     self.spk_count_avg_history)] = np.average(self.spk_count_window)
 
+        # sliding window average of credible interval
+        self.credible_window[0,np.mod(self.running_post_sum_counter,6)] = self.crit_ind
+        self.credible_avg = np.average(self.credible_window)
+
         # first check if 2 of 5 entries in spk_count_avg are below threshold
         # we only want this to happen once, so regardless of message, set self.shortcut_message_sent to True
         # new lockout end with spike count: replace posterior_in_lockout with _in_lockout (3 times below)
@@ -993,6 +1042,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     if self.norm_posterior_arm_sum[1] > self.posterior_arm_threshold:
                         detected_region = 1
                         print('arm1 above threshold')
+                        # conditional statement for trajectory
+                        #if (np.count_nonzero(self.pos_trajectory[0][self.arm_coords[1][0]:self.arm_coords[1][1]+1])>5):
+                        #    print('arm1 trajectory')
                     elif self.norm_posterior_arm_sum[2] > self.posterior_arm_threshold:
                         detected_region = 2
                         print('arm2 above threhsold')
@@ -1006,6 +1058,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                         detected_region = 0
                 else:
                     detected_region = np.argmax(self.norm_posterior_arm_sum)
+                    
+                    # i think you can put a conditional here to only call it for an arm if it's a trajectory
+                    #if (detected_region == 1 and not np.count_nonzero(
+                    #    self.pos_trajectory[0][self.arm_coords[1][0]:self.arm_coords[1][1]+1])>5):
+                    #    detected_region = 0
+
                 #print('max segment:',detected_region)
                 # replay detection of box - only send message for arm replays
                 if detected_region == 0:
@@ -1015,10 +1073,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     self.shortcut_message_arm = 0
 
                     # continue summing if time bin < 30 (150 msec)
+                    # i think we should make this 50 (250 msec)
                     # try without ripple end cut-off
                     #if (self.posterior_time_bin < 30 and np.count_nonzero(self.spk_count_avg < 
                     #        self.spike_count_base_avg-(0.5*self.spike_count_base_std)) > 1 ):
-                    if self.posterior_time_bin < 30:
+                    if self.posterior_time_bin < 50:
                         #print('posterior in box, continue summing')
 
                         # new normed posterior based on 50 msec only
@@ -1045,7 +1104,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                         self.long_rip_sum_counter += 1
 
                     else:
-                        print('box replay at 150 msec',self.ripple_bin_count)
+                        print('box replay at 250 msec',self.ripple_bin_count)
                         print('replay in box - no StateScript message. ripple', self._lockout_count,
                           'ripple time bin:',self.ripple_bin_count)
                         print('time delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1))
@@ -1057,7 +1116,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                       self.velocity, self.linearized_position,
                                       self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
                                       self.shortcut_message_arm, self.posterior_arm_threshold, 
-                                      self.ripple_end, self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
+                                      self.ripple_end, self.credible_avg,
+                                      self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
                                       self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
                                       self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
                                       self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
@@ -1083,7 +1143,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                     self.velocity, self.linearized_position,
                                       self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
                                       self.shortcut_message_arm, self.posterior_arm_threshold, 
-                                      self.ripple_end, self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
+                                      self.ripple_end, self.credible_avg,
+                                      self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
                                       self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
                                       self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
                                       self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
@@ -1141,7 +1202,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                 self.velocity, self.linearized_position,
                                   self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
                                   self.shortcut_message_arm, self.posterior_arm_threshold, 
-                                  self.ripple_end, self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
+                                  self.ripple_end, self.credible_avg,
+                                  self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
                                   self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
                                   self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
                                   self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
@@ -1180,7 +1242,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                 self.velocity, self.linearized_position,
                                   self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
                                   self.shortcut_message_arm, self.posterior_arm_threshold, 
-                                  self.ripple_end, self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
+                                  self.ripple_end, self.credible_avg,
+                                  self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
                                   self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
                                   self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
                                   self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
@@ -1190,7 +1253,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 # add to posterior sum during ripple
                 self.posterior_sum_ripple = self.posterior_sum_ripple + new_posterior_sum
                 self.ripple_bin_count += 1
-
+                self.pos_trajectory[0][self.post_max] += 1
 
         elif not self._in_lockout:
             self.shortcut_message_sent = False
@@ -1201,6 +1264,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             self.ripple_bin_count = 0
             self.long_ripple = False
             self.long_rip_sum_counter = 0
+            self.pos_trajectory = np.zeros((1,self.max_pos))
 
         # timer if needed
         # if self.running_post_sum_counter % 1 == 0:
