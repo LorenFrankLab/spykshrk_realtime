@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "monty_playback_9_4_run4_0",
+        "prefix": "monty_playback_9_4_run4_2",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -154,7 +154,9 @@
         "number_arms": 4,
         "bin_size": 180,
         "trans_mat_uniform_gain": 0.001,
-        "trans_mat_smoother_std": 3
+        "trans_mat_smoother_std": 3,
+        "circle_buffer": 1000,
+        "bin_delay": 2
     },
 
     "trodes_network": {

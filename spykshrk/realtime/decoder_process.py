@@ -724,8 +724,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
         # circular buffer for decoder
         self.decoded_spike_counter = 0
-        self.spike_buffer_size = 100
+        self.spike_buffer_size = self.config['pp_decoder']['circle_buffer']
         self.decoded_spike_array = np.zeros((self.spike_buffer_size, self.config['encoder']['position']['bins']+3))
+        self.decoder_bin_delay = self.config['pp_decoder']['bin_delay']
 
         # credible interval and posterior max
         self.spxx = []
@@ -785,12 +786,17 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 0] = spike_dec_msg.timestamp
             self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 1] = spike_dec_msg.elec_grp_id
             self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 2:-1] = spike_dec_msg.pos_hist
+            self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), -1] = 0
 
             if np.mod(self.decoded_spike_counter,self.spike_buffer_size) == 0 and self.decoded_spike_counter > 0:
                 # count number of 0's in last column, add this to dropped spike count
-                self.dropped_spikes += (100 - self.decoded_spike_array[:,-1].sum())
-            if self.dropped_spikes % 100 == 0:
+                self.dropped_spikes += (self.spike_buffer_size - self.decoded_spike_array[:,-1].sum())
+                # NOTE: we are not yet saving the dropped spikes!
+                # can put dan's saving function here and loop through all the dropped spikes - too slow??
+            if self.lfp_timekeeper_counter % 1000 == 0:
                 print('number of dropped spikes: ', self.dropped_spikes)
+                #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
+                #print(self.decoded_spike_array[:,-1])
 
             self.decoded_spike_counter += 1
 
@@ -806,12 +812,14 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             #print('posterior loop',self.lfp_timekeeper_counter,lfp_timekeeper.timestamp,(lfp_timekeeper.timestamp-2*6*30))
 
             if self.lfp_timekeeper_counter % 10 == 0:
-                self.record_timing(timestamp=lfp_timekeeper.timestamp-2*6*30, elec_grp_id=1,
+                self.record_timing(timestamp=lfp_timekeeper.timestamp-2*self.time_bin_size, elec_grp_id=1,
                                    datatype=datatypes.Datatypes.SPIKES, label='post_start')
 
             # find rows in array that are -12 to -6 msec behind current timestamp
-            posterior_spikes = self.decoded_spike_array[(self.decoded_spike_array[:,0]>(lfp_timekeeper.timestamp-2*6*30))&
-                                                        (self.decoded_spike_array[:,0]<(lfp_timekeeper.timestamp-1*6*30))]
+            posterior_spikes = self.decoded_spike_array[(self.decoded_spike_array[:,0]>
+                                                        (lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size))&
+                                                        (self.decoded_spike_array[:,0]<
+                                                        (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size))]
             if posterior_spikes.shape[0] > 0:
                 #print(self.lfp_timekeeper_counter)
                 #print(lfp_timekeeper.timestamp/30)
@@ -819,8 +827,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #print('posterior spikes',posterior_spikes.shape[0])
                 self.spike_count = posterior_spikes.shape[0]
                 # set last column in decoded_spike_array to 1 - might be able to do this directly to posterior_spikes
-                self.decoded_spike_array[np.where((self.decoded_spike_array[:,0]>(lfp_timekeeper.timestamp-2*6*30))&
-                        (self.decoded_spike_array[:,0]<(lfp_timekeeper.timestamp-1*6*30)))[0][:],-1] = 1
+                self.decoded_spike_array[np.where((self.decoded_spike_array[:,0]>
+                                                (lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size))&
+                                                (self.decoded_spike_array[:,0]<
+                                                (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size)))[0][:],-1] = 1
 
                 # run add observation
                 for i in range(0, posterior_spikes.shape[0]):
@@ -833,7 +843,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 
                 # record timing
                 if self.lfp_timekeeper_counter % 10 == 0:
-                    self.record_timing(timestamp=lfp_timekeeper.timestamp-2*6*30, elec_grp_id=1,
+                    self.record_timing(timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, elec_grp_id=1,
                                    datatype=datatypes.Datatypes.SPIKES, label='post_end')                
 
                 # calculate arm sum, max, and cred interval
@@ -852,8 +862,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 # send posterior message to main process
                 # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
-                self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-2*6*30,
-                                                     lfp_timekeeper.timestamp-2*6*30, self.posterior_arm_sum[0][0],
+                self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
+                                                     lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
+                                                     self.posterior_arm_sum[0][0],
                                                      self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
@@ -862,12 +873,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 # save posterior and likelihood
                 self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
-                                  lfp_timekeeper.timestamp-2*6*30, time,
+                                  lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
                                   self.pp_decoder.cur_pos, self.spike_count,
                                   *likelihood)
 
                 self.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
-                                  lfp_timekeeper.timestamp-2*6*30, time,
+                                  lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
                                   self.current_vel,
                                   self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                   self.spike_count, self.used_next_bin, self.taskState,
@@ -900,8 +911,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 # send posterior message to main process
                 # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
-                self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-2*6*30,
-                                                     lfp_timekeeper.timestamp-2*6*30, self.posterior_arm_sum[0][0],
+                self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
+                                                     lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
+                                                     self.posterior_arm_sum[0][0],
                                                      self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
@@ -910,12 +922,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 # save posterior and likelihood
                 self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
-                                  lfp_timekeeper.timestamp-2*6*30, time,
+                                  lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
                                   self.pp_decoder.cur_pos, self.spike_count,
                                   *likelihood)
 
                 self.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
-                                  lfp_timekeeper.timestamp-2*6*30, time,
+                                  lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
                                   self.current_vel,
                                   self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                   self.spike_count, self.used_next_bin, self.taskState,
