@@ -113,8 +113,17 @@ class EncoderMPISendInterface(realtime_base.RealtimeMPIClass):
         self.class_log.debug("Done sending binary record registration messages.")
 
     def send_decoded_spike(self, query_result_message: SpikeDecodeResultsMessage):
-        self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'],
-                       tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA)
+        # decide which decoder to send spike to based on encoder rank
+        if self.rank in self.config['tetrode_split']['1st_half']:
+            self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'][0],
+                           tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA)            
+        elif self.rank in self.config['tetrode_split']['2nd_half']:
+            self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'][1],
+                           tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA) 
+
+        # original
+        #self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'],
+        #               tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA)
 
     def send_time_sync_report(self, time):
         self.comm.send(obj=realtime_base.TimeSyncReport(time),

@@ -835,6 +835,23 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                 (self.decoded_spike_array[:,0]<
                                                 (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size)))[0][:],-1] = 1
 
+                # check for multiple timestamps here - if tet list is split in 2 we can just remove any duplicates
+                # ideally we might want to only remove triplicates or more, but not sure how to do this
+                vals, inverse, count = np.unique(posterior_spikes[:,0], return_inverse=True,return_counts=True)
+
+                idx_vals_repeated = np.where(count > 1)[0]
+                vals_repeated = vals[idx_vals_repeated]
+
+                rows, cols = np.where(inverse == idx_vals_repeated[:, np.newaxis])
+                _, inverse_rows = np.unique(rows, return_index=True)
+                res = np.split(cols, inverse_rows[1:])
+
+                if res[0].shape[0] > 0:
+                    posterior_spikes = posterior_spikes[~res[0],:]
+                    print('removed duplicate spikes in decoder')
+                else:
+                    posterior_spikes = posterior_spikes
+
                 # run add observation
                 for i in range(0, posterior_spikes.shape[0]):
                     self.pp_decoder.add_observation(spk_elec_grp_id=posterior_spikes[i,1],

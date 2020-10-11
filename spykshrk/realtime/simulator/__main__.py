@@ -163,7 +163,6 @@ def main(argv):
             ripple_proc.main_loop()
             print('ripple process main loop ended, rank:',rank)
 
-
         if rank in config['rank']['encoders']:
             #time.sleep(0.1)
             print('encoder process start in main, rank:',rank)
@@ -173,14 +172,23 @@ def main(argv):
             encoding_proc.main_loop()
             print('encoder process main loop ended:',rank)
 
-        if rank == config['rank']['decoder']:
+        # original: 1 decoder
+        #if rank == config['rank']['decoder']:
+        #    #time.sleep(0.1)
+        #    decoding_proc = decoder_process.DecoderProcess(comm=comm, rank=rank, config=config)
+        #    if config['datasource'] == 'trodes':
+        #        network.registerTerminateCallback(decoding_proc.trigger_termination)
+        #    decoding_proc.main_loop()
+        #    print('decoder process main loop ended:',rank)
+
+        # for more than 1 decoder
+        if rank in config['rank']['decoder']:
             #time.sleep(0.1)
             decoding_proc = decoder_process.DecoderProcess(comm=comm, rank=rank, config=config)
             if config['datasource'] == 'trodes':
                 network.registerTerminateCallback(decoding_proc.trigger_termination)
             decoding_proc.main_loop()
             print('decoder process main loop ended:',rank)
-
 
         if config['datasource'] == 'trodes':
             network.closeConnections()

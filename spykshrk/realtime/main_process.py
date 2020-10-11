@@ -1772,8 +1772,13 @@ class MainSimulatorManager(rt_logging.LoggingClass):
                 rank, all_encoder_process_enable[rank_ind])
 
     def _decoder_rank_startup(self, trode_list):
-        rank = self.config['rank']['decoder']
-        self.send_interface.send_channel_selection(rank, trode_list)
+        # original: single decoder
+        #rank = self.config['rank']['decoder']
+        #self.send_interface.send_channel_selection(rank, trode_list)
+        # for more than 1 decoder
+        for dec_rank in self.config['rank']['decoder']:
+            self.send_interface.send_channel_selection(dec_rank, trode_list)
+
 
     def _writer_startup(self):
         # Update binary_record file writers before starting datastream
@@ -1800,8 +1805,12 @@ class MainSimulatorManager(rt_logging.LoggingClass):
             self.send_interface.send_turn_on_datastreams(rank)
 
         # Turn on data streaming to decoder
-        self.send_interface.send_turn_on_datastreams(
-            self.config['rank']['decoder'])
+        # original 1 decoder
+        #self.send_interface.send_turn_on_datastreams(
+        #    self.config['rank']['decoder'])
+        # more than 1 decoder
+        for rank in self.config['rank']['decoder']:
+            self.send_interface.send_turn_on_datastreams(rank)        
 
         self.time_sync_on = True
 
