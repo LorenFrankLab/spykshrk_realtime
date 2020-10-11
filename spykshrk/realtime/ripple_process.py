@@ -481,9 +481,13 @@ class RippleMPISendInterface(realtime_base.RealtimeMPIClass):
     def send_ripple_thresh_state_decoder(self, timestamp, elec_grp_id, thresh_state, conditioning_thresh_state):
         message = RippleThresholdState(timestamp, elec_grp_id, thresh_state, conditioning_thresh_state)
 
-        self.comm.Send(buf=message.pack(),
-                       dest=self.config['rank']['decoder'],
-                       tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
+        # original - 1 decoder
+        #self.comm.Send(buf=message.pack(),
+        #               dest=self.config['rank']['decoder'],
+        #               tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
+        # new - more than 1 decoder
+        for rank in self.config['rank']['decoder']:
+            self.comm.Send(buf=message.pack(),dest=rank,tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)            
 
     def forward_timing_message(self, timing_msg: timing_system.TimingMessage):
         self.comm.Send(buf=timing_msg.pack(),
