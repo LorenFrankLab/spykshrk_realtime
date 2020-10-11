@@ -16,7 +16,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "remy_20_2_19tet_9_29_new_decode",
+        "prefix": "remy_20_2_19tet_9_29_new_decode_3",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -151,7 +151,7 @@
         "trans_mat_uniform_gain": 0.001,
         "trans_mat_smoother_std": 3,
         "circle_buffer": 1000,
-        "bin_delay": 2
+        "bin_delay": 3
     },
 
     "trodes_network": {

@@ -174,6 +174,7 @@ class LFPTimekeeperRecvInterface(realtime_base.RealtimeMPIClass):
 
         if rdy:
             #if self.mpi_statuses[0].source in self.config['rank']['ripples']:
+            # NOTE: this will only work if rank 2 is a ripple process
             if self.mpi_statuses[0].source in [2]:    
                 message = ripple_process.RippleThresholdState.unpack(
                     message_bytes=self.feedback_bytes)
@@ -764,7 +765,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         # this counts every time an lfp timestamp comes in and will be used below so that the posterior
         # loop only runs every 6 msec (9 LFP values)
         if lfp_timekeeper is not None:
-            if lfp_timekeeper.elec_grp_id == 1:
+            if lfp_timekeeper.elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]:
                 self.lfp_timekeeper_counter += 1
                 #print(lfp_timekeeper.timestamp)
 
@@ -795,6 +796,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # can put dan's saving function here and loop through all the dropped spikes - too slow??
             if self.lfp_timekeeper_counter % 1000 == 0:
                 print('number of dropped spikes: ', self.dropped_spikes)
+                #print('ripple tet',self.config['trodes_network']['ripple_tetrodes'][0])
                 #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
                 #print(self.decoded_spike_array[:,-1])
 
@@ -808,7 +810,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         # note we only want this to run every 6 msec, so need something to check the lfp timestamp
         # we could start this only after 10 spikes have been received
         if (lfp_timekeeper is not None and self.lfp_timekeeper_counter % 9 == 0 and
-             lfp_timekeeper.elec_grp_id == 1):
+             lfp_timekeeper.elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]):
+            #self.config['trodes_network']['ripple_tetrodes'][0]
             #print('posterior loop',self.lfp_timekeeper_counter,lfp_timekeeper.timestamp,(lfp_timekeeper.timestamp-2*6*30))
 
             if self.lfp_timekeeper_counter % 10 == 0:
