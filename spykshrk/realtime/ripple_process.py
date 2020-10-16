@@ -360,7 +360,7 @@ class RippleFilter(rt_logging.LoggingClass):
                     self.param.ripple_threshold = np.int(new_ripple_threshold[4:7])/10
 
                 # only print for one ripple process, rank 3
-                if rank == 3:
+                if rank == self.config['rank']['ripples'][1]:
                     print('conditioning ripple threshold = ',self.conditioning_ripple_threshold,
                           'content ripple threshold = ',self.param.ripple_threshold)
 
@@ -638,7 +638,7 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                                                        thresh_state=filter_state,
                                                        conditioning_thresh_state=conditioning_filter_state)
                 #also send thresh cross to decoder - only for rank == 2 aka first ripple_node
-                if self.rank == 2:
+                if self.rank == self.config['rank']['ripples'][0]:
                     self.mpi_send.send_ripple_thresh_state_decoder(timestamp=datapoint.timestamp,
                                                            elec_grp_id=datapoint.elec_grp_id,
                                                            thresh_state=filter_state,

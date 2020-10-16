@@ -114,10 +114,10 @@ class EncoderMPISendInterface(realtime_base.RealtimeMPIClass):
 
     def send_decoded_spike(self, query_result_message: SpikeDecodeResultsMessage):
         # decide which decoder to send spike to based on encoder rank
-        if self.rank in self.config['tetrode_split']['1st_half']:
+        if query_result_message.elec_grp_id in self.config['tetrode_split']['1st_half']:
             self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'][0],
                            tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA)            
-        elif self.rank in self.config['tetrode_split']['2nd_half']:
+        elif query_result_message.elec_grp_id in self.config['tetrode_split']['2nd_half']:
             self.comm.Send(buf=query_result_message.pack(), dest=self.config['rank']['decoder'][1],
                            tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA) 
 
@@ -151,13 +151,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                                                'position'],
                                                               ['timestamp',
                                                                'elec_grp_id','ch1','ch2','ch3','ch4',
-                                                               'position','velocity'] +
+                                                               'position','velocity','encode_spike','decoder_num'] +
                                                               ['x{:0{dig}d}'.
                                                                format(x, dig=len(str(config['encoder']
                                                                                      ['position']['bins'])))
                                                                for x in range(config['encoder']['position']['bins'])]],
                                                   rec_formats=['qidd',
-                                                               'qidddddd'+'d'*config['encoder']['position']['bins']])
+                                                               'qiddddddqq'+'d'*config['encoder']['position']['bins']])
 
         self.rank = rank
         self.config = config
@@ -195,6 +195,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_sent = 3
         self.spike_timestamp = 0
         self.spike_elec_grp_id = 0
+        self.decoder_number = 0
+        self.encoding_spike = 0
 
         # taskState variable for adding spikes to encoding model
         # set to 0 to test loading the old tree - will turn off new mark and use old occupancy in kernel_encoder
@@ -338,12 +340,24 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     #                       query_result.ntrode_id,
                     #                       weight, position)
 
+                    # record which decoder is receiving spike
+                    if datapoint.elec_grp_id in self.config['tetrode_split']['1st_half']:
+                        self.decoder_number = self.config['rank']['decoder'][0]
+                    elif datapoint.elec_grp_id in self.config['tetrode_split']['2nd_half']:
+                        self.decoder_number = self.config['rank']['decoder'][1]
+
+                    # record if this is an encoding spike
+                    if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
+                        self.encoding_spike = 1
+                    else:
+                        self.encoding_spike = 0
+
                     # save query_weights instead of query_hist: this will save number of spikes in rectangle
                     self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
                                       query_result.query_time,
                                       query_result.elec_grp_id,
                                       amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
-                                      self.current_pos,self.current_vel,
+                                      self.current_pos,self.current_vel,self.encoding_spike,self.decoder_number,
                                       *query_result.query_hist)
 
                     # weights have constantly changing size and are very small numbers - how to get # marks??
@@ -371,7 +385,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     # can also add a secondary spike amplitude filter here
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
                     if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
-                        if self.spk_counter % 100 == 0 and self.rank == 25:
+                        if self.spk_counter % 100 == 0 and self.rank == self.config['rank']['encoders'][0]:
                             print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
                             print('number of noise events detected:',self.count_noise_events)
 

@@ -297,9 +297,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_timestamp = 0
         self.crit_ind = 0
         self.post_max = 0
+        self.dec_rank = 0
 
         self.velocity = 0
         self.linearized_position = 0
+        self.pos_dec_rank = 0
         self.vel_pos_counter = 0
         self.thresh_counter = 0
         self.postsum_timing_counter = 0
@@ -777,10 +779,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     # MEC: this function brings in velocity and linearized position from decoder process
 
-    def velocity_position(self, bin_timestamp, vel, pos):
+    def velocity_position(self, bin_timestamp, vel, pos, pos_dec_rank):
         self.velocity = vel
         self.linearized_position = pos
         self.vel_pos_counter += 1
+        self.pos_dec_rank = pos_dec_rank
 
         if self.velocity < self.ripple_detect_velocity:
             #print('immobile, vel = ',self.velocity)
@@ -791,7 +794,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     # MEC: this function sums the posterior during each ripple, then sends shortcut message
     # need to add location filter so it only sends message when rat is at rip/wait well - no, that is in statescript
-    def posterior_sum(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, networkclient):
+    def posterior_sum(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, dec_rank, networkclient):
         time = MPI.Wtime()
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
@@ -807,6 +810,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_count = spike_count
         self.crit_ind = crit_ind
         self.post_max = posterior_max
+        self.dec_rank = dec_rank
 
         # reset posterior arm threshold (e.g. 0.5) based on the new_ripple_threshold text file
         # this should run every 10 sec, using thresh_counter which refers to each message from ripple node
@@ -825,6 +829,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #    #    reward_arm_file.write(str(1)+'\n')
         #    print('set tasktate to 1 at beginning')
 
+        #print('decoder rank',self.dec_rank)
         # lets try 500 instead of 1500
         if self.thresh_counter % 500 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
             # if self.vel_pos_counter % 1000 == 0:
@@ -1492,8 +1497,8 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
         self.networkclient = networkclient
         # NOTE: if you dont know how large the buffer should be, set it to a large number
         # then you will get an error saying what it should be set to
-        # bytearray was 80 before adding spike_count
-        self.msg_buffer = bytearray(92)
+        # bytearray was 80 before adding spike_count, 92 before adding rank
+        self.msg_buffer = bytearray(96)
         self.req = self.comm.Irecv(
             buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
 
@@ -1517,7 +1522,7 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
                                     arm2=message.arm2, arm3=message.arm3, arm4=message.arm4, arm5=message.arm5,
                                     arm6=message.arm6, arm7=message.arm7, arm8=message.arm8,
                                     spike_count=message.spike_count, crit_ind=message.crit_ind,
-                                    posterior_max=message.posterior_max, networkclient=self.networkclient)
+                                    posterior_max=message.posterior_max, dec_rank=message.rank, networkclient=self.networkclient)
             #print('posterior sum message supervisor: ',message.spike_timestamp,time*1000)
             # return posterior_sum
 
@@ -1547,7 +1552,7 @@ class VelocityPositionRecvInterface(realtime_base.RealtimeMPIClass):
         self.networkclient = networkclient
         # NOTE: if you dont know how large the buffer should be, set it to a large number
         # then you will get an error saying what it should be set to
-        self.msg_buffer = bytearray(16)
+        self.msg_buffer = bytearray(20)
         self.req = self.comm.Irecv(
             buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
 
@@ -1562,7 +1567,7 @@ class VelocityPositionRecvInterface(realtime_base.RealtimeMPIClass):
 
             # okay so we are receiving the message! but now it needs to get into the stim decider
             self.stim.velocity_position(
-                bin_timestamp=message.bin_timestamp, pos=message.pos, vel=message.vel)
+                bin_timestamp=message.bin_timestamp, pos=message.pos, vel=message.vel, pos_dec_rank=message.rank)
             #print('posterior sum message supervisor: ',message.timestamp,time*1000)
             # return posterior_sum
 
