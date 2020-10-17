@@ -443,12 +443,24 @@ class PointProcessDecoder(rt_logging.LoggingClass):
             #print('firing rate vel thresh',vel_data,'tetrode',spk_elec_grp_id)
             self.firing_rate[spk_elec_grp_id][self.cur_pos_ind] += 1
 
+        tet_fr_norm = self.firing_rate[spk_elec_grp_id] / self.firing_rate[spk_elec_grp_id].sum()
+            # MEC normalize self.occ to match calcuation in offline decoder
+            # MEC 9-3-19 to turn off prob_no_spike
+            #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+        prob_no_spike = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+                                           tet_fr_norm / (self.occ / np.nansum(self.occ)))
+        prob_no_spike[np.isnan(prob_no_spike)] = 0.0
+        
         self.observation *= spk_pos_hist
         #print('decoded spike',spk_pos_hist)
         # print('observation',self.observation)
+        # add 10-16-20: multiply obs by prob_no_spike for that tetrode
+        self.observation *= prob_no_spike
         # MEC: i think this should be normalized, not divided by max????
-        self.observation = self.observation / np.max(self.observation)
-        # print('observation',self.observation)
+        #self.observation = self.observation / np.max(self.observation)
+        # 10-16-20 try normalize instead
+        self.observation = self.observation / self.observation.sum()
+        #print('observation',self.observation)
         self.current_spike_count += 1
         self.total_decoded_spike_count += 1
         # add marker for tet with observation
