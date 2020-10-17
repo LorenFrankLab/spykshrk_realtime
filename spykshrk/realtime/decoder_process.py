@@ -24,11 +24,12 @@ class PosteriorSum(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'IIdddddddddiiii'
+    _byte_format = 'IIddddddddddiiii'
 
-    def __init__(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
+    def __init__(self, bin_timestamp, spike_timestamp, target, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
+        self.target = target
         self.box = box
         self.arm1 = arm1
         self.arm2 = arm2
@@ -44,16 +45,16 @@ class PosteriorSum(rt_logging.PrintableMessage):
         self.rank = rank
 
     def pack(self):
-        return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.box,
+        return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.target, self.box,
                            self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
                            self.arm8, self.spike_count, self.crit_ind, self.posterior_max, self.rank)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank = struct.unpack(
+        bin_timestamp, spike_timestamp, target, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank = struct.unpack(
             cls._byte_format, message_bytes)
-        return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, box=box, arm1=arm1, arm2=arm2,
-                   arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, spike_count=spike_count,
+        return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, box=box, arm1=arm1, 
+                    arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, spike_count=spike_count,
                    crit_ind=crit_ind, posterior_max=posterior_max, rank=rank)
 
 
@@ -92,8 +93,8 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     # def sending posterior message to supervisor with POSTERIOR tag
-    def send_posterior_message(self, bin_timestamp, spike_timestamp, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
-        message = PosteriorSum(bin_timestamp, spike_timestamp, box,
+    def send_posterior_message(self, bin_timestamp, spike_timestamp, target, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
+        message = PosteriorSum(bin_timestamp, spike_timestamp, target, box,
                                arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count,
                                crit_ind, posterior_max, rank)
         #print('stim_message: ',message)
@@ -778,6 +779,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spxx = []
         self.crit_ind = 0
         self.posterior_max = 0
+        self.posterior_sum_target = 0
 
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
@@ -962,11 +964,15 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # calculate max position of posterior
                 self.posterior_max = posterior.argmax()
 
+                # calculate sum of target segment
+                self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
+                                                    self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+
                 # send posterior message to main process
                 # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                 self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
                                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                     self.posterior_arm_sum[0][0],
+                                                     self.posterior_sum_target, self.posterior_arm_sum[0][0],
                                                      self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
@@ -1011,11 +1017,15 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # calculate max position of posterior
                 self.posterior_max = posterior.argmax()
 
+                # calculate sum of target segment
+                self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
+                                                    self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+
                 # send posterior message to main process
                 # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                 self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
                                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                     self.posterior_arm_sum[0][0],
+                                                     self.posterior_sum_target, self.posterior_arm_sum[0][0],
                                                      self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],

@@ -44,7 +44,9 @@
         "previous_spike_count_avg": 1.312,
         "previous_spike_count_std": 0.931,
         "replay_target_arm": 1,
-        "replay_non_target_arm": 2,
+        "replay_non_target_arm": [2,3,4],
+        "replay_target_start": 20,
+        "replay_target_end": 24,
         "condition_rip_thresh": 100,
         "shortcut_msg_lockout": 30000
     },
