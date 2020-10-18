@@ -849,14 +849,14 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # NOTE: we are not yet saving the dropped spikes!
                 # can put dan's saving function here and loop through all the dropped spikes - too slow??
                 missed_spike_array = self.decoded_spike_array[self.decoded_spike_array[:,-1] == 0]
-                for line in np.arange(missed_spike_array.shape[0]):
-                    #save missed spike
-                    self.write_record(realtime_base.RecordIDs.DECODER_MISSED_SPIKES,
-                                  np.int(missed_spike_array[line,0]), np.int(missed_spike_array[line,1]),
-                                  0, self.decoder_timestamp-self.decoder_bin_delay*self.time_bin_size)
+                #for line in np.arange(missed_spike_array.shape[0]):
+                #    #save missed spike
+                #    self.write_record(realtime_base.RecordIDs.DECODER_MISSED_SPIKES,
+                #                  np.int(missed_spike_array[line,0]), np.int(missed_spike_array[line,1]),
+                #                  0, self.decoder_timestamp-self.decoder_bin_delay*self.time_bin_size)
             if self.lfp_timekeeper_counter % 1000 == 0:
-                print('number of dropped spikes: ', self.dropped_spikes)
-                print('duplicated spikes:',self.duplicate_spikes)
+                print(self.rank, 'number of dropped spikes:',self.dropped_spikes)
+                print(self.rank, 'duplicated spikes:',self.duplicate_spikes)
                 #print('ripple tet',self.config['trodes_network']['ripple_tetrodes'][0])
                 #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
                 #print(self.decoded_spike_array[:,-1])
@@ -918,20 +918,21 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #else:
                 #    posterior_spikes = posterior_spikes
 
-                # try again with conversion to pandas, drop dups
-                #print(posterior_spikes.shape)
-                spikes_before = posterior_spikes.shape[0]
-                posterior_spikes_pandas = pd.DataFrame(posterior_spikes)
-                #print(posterior_spikes_pandas.shape)
-                #print(posterior_spikes_pandas)
-                posterior_spikes_pandas.drop_duplicates(subset=0,keep=False,inplace=True)
-                #print(posterior_spikes_pandas.shape)
-                posterior_spikes = posterior_spikes_pandas.to_numpy()
-                #print(posterior_spikes.shape)
-                spikes_after = posterior_spikes.shape[0]
-                if spikes_before != spikes_after:
-                    #print('dup spikes',spikes_before,spikes_after)
-                    self.duplicate_spikes += (spikes_before-spikes_after)
+                # CURRENT VERSION for removing duplicate spikes
+                # # try again with conversion to pandas, drop dups
+                # #print(posterior_spikes.shape)
+                # spikes_before = posterior_spikes.shape[0]
+                # posterior_spikes_pandas = pd.DataFrame(posterior_spikes)
+                # #print(posterior_spikes_pandas.shape)
+                # #print(posterior_spikes_pandas)
+                # posterior_spikes_pandas.drop_duplicates(subset=0,keep=False,inplace=True)
+                # #print(posterior_spikes_pandas.shape)
+                # posterior_spikes = posterior_spikes_pandas.to_numpy()
+                # #print(posterior_spikes.shape)
+                # spikes_after = posterior_spikes.shape[0]
+                # if spikes_before != spikes_after:
+                #     #print('dup spikes',spikes_before,spikes_after)
+                #     self.duplicate_spikes += (spikes_before-spikes_after)
 
                 # count spikes after removing deuplicates
                 self.spike_count = posterior_spikes.shape[0]
