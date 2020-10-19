@@ -897,26 +897,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                 (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size)))[0][:],-1] = 1
 
                 # check for multiple timestamps here - if tet list is split in 2 we can just remove any duplicates
-                # ideally we might want to only remove triplicates or more, but not sure how to do this
-                # turn this off for now
-                #vals, inverse, count = np.unique(posterior_spikes[:,0], return_inverse=True,return_counts=True)
-
-                #idx_vals_repeated = np.where(count > 1)[0]
-                #vals_repeated = vals[idx_vals_repeated]
-
-                #rows, cols = np.where(inverse == idx_vals_repeated[:, np.newaxis])
-                #_, inverse_rows = np.unique(rows, return_index=True)
-                #res = np.split(cols, inverse_rows[1:])
-
-                #if res[0].shape[0] > 0:
-                #    print('rank',self.rank)
-                #    print('before',posterior_spikes.shape)
-                #    posterior_spikes = posterior_spikes[~res[0],:]
-                #    print('after',posterior_spikes.shape)
-                #    print('res shape',res[0].shape[0])
-                   #print('removed duplicate spikes in decoder')
-                #else:
-                #    posterior_spikes = posterior_spikes
 
                 # CURRENT VERSION for removing duplicate spikes
                 # # try again with conversion to pandas, drop dups
@@ -934,71 +914,141 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #     #print('dup spikes',spikes_before,spikes_after)
                 #     self.duplicate_spikes += (spikes_before-spikes_after)
 
-                # count spikes after removing deuplicates
-                self.spike_count = posterior_spikes.shape[0]
+                # NEW VERSION: should be much faster than pandas conversion
+                # note: use `arr[tuple(seq)]` instead of `arr[seq]`. line 923
+                #print(posterior_spikes.shape)
+                spikes_before = posterior_spikes.shape[0]
+                _, inds, counts = np.unique(posterior_spikes[:, 0], return_index=True, return_counts=True)
+                unique_inds = inds[np.argwhere(counts == 1).squeeze()]
+                posterior_spikes = posterior_spikes[[unique_inds]]
+                spikes_after = posterior_spikes.shape[0]
+                if spikes_before != spikes_after:
+                    #print('dup spikes',spikes_before,spikes_after)
+                    self.duplicate_spikes += (spikes_before-spikes_after)                
 
+                #print(posterior_spikes.shape)
+                #print(posterior_spikes)
+                #print(range(0, posterior_spikes.shape[0]))
                 # run add observation
-                for i in range(0, posterior_spikes.shape[0]):
-                    self.pp_decoder.add_observation(spk_elec_grp_id=posterior_spikes[i,1],
+                if posterior_spikes.shape[0] > 0:
+                    self.spike_count = posterior_spikes.shape[0]
+
+                    for i in range(0, posterior_spikes.shape[0]):
+                        self.pp_decoder.add_observation(spk_elec_grp_id=posterior_spikes[i,1],
                                                 spk_pos_hist=posterior_spikes[i,2:-1],
                                                 vel_data=self.current_vel, taskState=self.taskState)
                
-                # run increment bin: to calculate like and posterior
-                posterior, likelihood = self.pp_decoder.increment_bin()
-                
-                # record timing
-                if self.lfp_timekeeper_counter % 10 == 0:
-                    self.record_timing(timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, elec_grp_id=1,
-                                   datatype=datatypes.Datatypes.SPIKES, label='post_end')                
+                    # run increment bin: to calculate like and posterior
+                    posterior, likelihood = self.pp_decoder.increment_bin()
+                    
+                    # record timing
+                    if self.lfp_timekeeper_counter % 10 == 0:
+                        self.record_timing(timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, elec_grp_id=1,
+                                       datatype=datatypes.Datatypes.SPIKES, label='post_end')                
 
-                # calculate arm sum, max, and cred interval
-                self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(
-                    posterior, self.ripple_time_bin)
-                #self.posterior_arm_sum = np.zeros((1,9))
+                    # calculate arm sum, max, and cred interval
+                    self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(
+                        posterior, self.ripple_time_bin)
+                    #self.posterior_arm_sum = np.zeros((1,9))
 
-                # add credible interval here and add to message
-                self.spxx = np.sort(posterior)[::-1]
-                self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
-                #if spike_dec_msg is not None and self.msg_counter % 10000 == 0:
-                #    print('credible interval',self.crit_ind)
+                    # add credible interval here and add to message
+                    self.spxx = np.sort(posterior)[::-1]
+                    self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
+                    #if spike_dec_msg is not None and self.msg_counter % 10000 == 0:
+                    #    print('credible interval',self.crit_ind)
 
-                # calculate max position of posterior
-                self.posterior_max = posterior.argmax()
+                    # calculate max position of posterior
+                    self.posterior_max = posterior.argmax()
 
-                # calculate sum of target segment
-                self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
-                                                    self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+                    # calculate sum of target segment
+                    self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
+                                                        self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
 
-                # send posterior message to main process
-                # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
-                self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
-                                                     lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                     self.posterior_sum_target, self.posterior_arm_sum[0][0],
-                                                     self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
-                                                     self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
-                                                     self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
-                                                     self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
-                                                     self.spike_count,self.crit_ind,self.posterior_max,self.rank)
+                    # send posterior message to main process
+                    # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
+                    self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
+                                                         lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
+                                                         self.posterior_sum_target, self.posterior_arm_sum[0][0],
+                                                         self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
+                                                         self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
+                                                         self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
+                                                         self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
+                                                         self.spike_count,self.crit_ind,self.posterior_max,self.rank)
 
-                # save posterior and likelihood
-                self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
-                                  lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
-                                  self.pp_decoder.cur_pos, self.spike_count,self.rank,
-                                  *likelihood)
+                    # save posterior and likelihood
+                    self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
+                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
+                                      self.pp_decoder.cur_pos, self.spike_count,self.rank,
+                                      *likelihood)
 
-                self.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
-                                  lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
-                                  self.current_vel,
-                                  self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
-                                  self.spike_count, self.used_next_bin, self.taskState,
-                                  self.ripple_thresh_decoder, self.ripple_number, 
-                                  self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
-                                  self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
-                                  self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
-                                  self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
-                                  self.posterior_arm_sum[0][8],self.rank,
-                                  *posterior)                
-                
+                    self.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
+                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
+                                      self.current_vel,
+                                      self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
+                                      self.spike_count, self.used_next_bin, self.taskState,
+                                      self.ripple_thresh_decoder, self.ripple_number, 
+                                      self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
+                                      self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
+                                      self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
+                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
+                                      self.posterior_arm_sum[0][8],self.rank,
+                                      *posterior)                
+                    
+                elif posterior_spikes.shape[0] == 0:
+                    #print('no spikes after remove duplicates')  
+                      
+                    self.spike_count = 0
+                    # run increment no spike
+                    posterior, likelihood = self.pp_decoder.increment_no_spike_bin()
+
+                    # calculate arm sum, max, and cred interval
+                    self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(
+                        posterior, self.ripple_time_bin)
+                    #self.posterior_arm_sum = np.zeros((1,9))
+
+                    # add credible interval here and add to message
+                    self.spxx = np.sort(posterior)[::-1]
+                    self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
+                    #if spike_dec_msg is not None and self.msg_counter % 10000 == 0:
+                    #    print('credible interval',self.crit_ind)
+
+                    # calculate max position of posterior
+                    self.posterior_max = posterior.argmax()
+
+                    # calculate sum of target segment
+                    self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
+                                                        self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+
+                    # send posterior message to main process
+                    # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
+                    self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
+                                                         lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
+                                                         self.posterior_sum_target, self.posterior_arm_sum[0][0],
+                                                         self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
+                                                         self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
+                                                         self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
+                                                         self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
+                                                         self.spike_count,self.crit_ind,self.posterior_max,self.rank)
+
+                    # save posterior and likelihood
+                    self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
+                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
+                                      self.pp_decoder.cur_pos, self.spike_count,self.rank,
+                                      *likelihood)
+
+                    self.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
+                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, time,
+                                      self.current_vel,
+                                      self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
+                                      self.spike_count, self.used_next_bin, self.taskState,
+                                      self.ripple_thresh_decoder, self.ripple_number, 
+                                      self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
+                                      self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
+                                      self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
+                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
+                                      self.posterior_arm_sum[0][8],self.rank,
+                                      *posterior)                
+
             elif posterior_spikes.shape[0] == 0:
                 self.spike_count = 0
                 # run increment no spike

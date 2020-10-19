@@ -21,7 +21,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "charlie_7_14_run3_2decoder_v9",
+        "prefix": "charlie_7_14_run3_2decoder_v11",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -36,6 +36,7 @@
         "session_type": "run",
         "instructive": 0,
         "posterior_sum_threshold": 0.5,
+        "second_post_sum_thresh": 0.3,
         "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
         "post_sum_sliding_window": 6,
@@ -58,7 +59,7 @@
             "ripple_threshold": 4,
             "baseline_window_timestamp": 450000,
             "n_above_thresh": 2,
-            "lockout_time": 6000,
+            "lockout_time": 3000,
             "posterior_lockout_time": 0,
             "ripple_conditioning_lockout_time": 0,
             "detect_no_ripples": false,

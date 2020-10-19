@@ -350,6 +350,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.posterior_sum_ripple = np.zeros((9,))
         self.ripple_bin_count = 0
         self.other_arm_thresh = self.config['ripple_conditioning']['other_arm_threshold']
+        self.second_post_sum_thresh = self.config['ripple_conditioning']['second_post_sum_thresh']
+        self.other_arms = self.config['ripple_conditioning']['replay_non_target_arm']
 
         # for spike count average
         if self.config['ripple_conditioning']['session_type'] == 'run':
@@ -442,13 +444,14 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     def update_ripple_threshold_state(self, timestamp, elec_grp_id, threshold_state, conditioning_thresh_state, networkclient):
         # Log timing
-        if self.thresh_counter % 100 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
+        if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
             self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
                                datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
         time = MPI.Wtime()
 
         # record timestamp from ripple node
-        self.lfp_timestamp = timestamp
+        if elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]:
+            self.lfp_timestamp = timestamp
 
         #print('received thresh states: ',threshold_state,conditioning_thresh_state)
 
@@ -674,7 +677,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
               'position:', np.around(self.linearized_position, decimals=2),
               'posterior bins in ripple:', self.posterior_time_bin, 'ending bin timestamp:', self.bin_timestamp,
               'lfp timestamp:', self.lfp_timestamp, 
-              'delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1),
+              'delay 1:', np.around((self.lfp_timestamp - self.bin_timestamp_1) / 30, decimals=1),
+              'delay 2:', np.around((self.lfp_timestamp - self.bin_timestamp_2) / 30, decimals=1),
               'spike count:', self.posterior_spike_count, 'sliding window:', self.post_sum_sliding_window_actual)
         #self.shortcut_message_arm = np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0]
         self.shortcut_message_arm = arm
@@ -952,9 +956,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         if self.running_post_sum_counter % 10000 == 0:
             print('running sum of posterior', self.running_post_sum_counter)
 
-        if self.thresh_counter % 15000 == 0:
+        if self.thresh_counter % 500 == 0:
             print('decoder1 delay',(self.lfp_timestamp - self.bin_timestamp_1) / 30,'count',self.decoder_1_count)
             print('decoder2 delay',(self.lfp_timestamp - self.bin_timestamp_2) / 30,'count',self.decoder_2_count)
+            #print('lockout time',self._lockout_time)
+            #print(self.norm_posterior_arm_sum_1[self.other_arms])
 
         # timer if needed
         # if self.running_post_sum_counter % 1 == 0:
@@ -1046,31 +1052,33 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # NEW 10-17-20: check target sum for non-local event, and check other arms, then send message, start lockout
         # NOTE currently 2nd set of tetrodes cutoff is hard coded here
         # NOTE currently no velocity filter
-        if (self.target_sum_avg_1 > self.posterior_arm_threshold or self.target_sum_avg_2 > self.posterior_arm_threshold
-            and not self._in_lockout):
+        # for lockout try lfp_timestamp - how often are getting lfp messages???
+        if ((self.target_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout) or 
+            (self.target_sum_avg_2 > self.posterior_arm_threshold and not self._in_lockout)):
+            #self._in_lockout = True
             if self.target_sum_avg_1 > self.target_sum_avg_2:
-                if self.target_sum_avg_2 > self.posterior_arm_threshold - 0.1:
-                    if (self.norm_posterior_arm_sum_1[2]<0.2 and self.norm_posterior_arm_sum_1[3]<0.2 and 
-                        self.norm_posterior_arm_sum_1[4]<0.2 and self.norm_posterior_arm_sum_2[2]<0.2 and
-                        self.norm_posterior_arm_sum_2[3]<0.2 and self.norm_posterior_arm_sum_2[4]<0.2):
+                if self.target_sum_avg_2 > self.second_post_sum_thresh:
+                    if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh) and 
+                        np.all(self.norm_posterior_arm_sum_2[self.other_arms]<self.other_arm_thresh) ):
                         #print('arm1 end detected decode 1',self.target_sum_avg_1 ,self.target_sum_avg_2)
                         self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
-                        self.posterior_sum_statescript_message(1, networkclient)
+                        #print(self._in_lockout)
                         self._in_lockout = True
-                        self._last_lockout_timestamp = self.bin_timestamp
+                        self._last_lockout_timestamp = self.bin_timestamp_1
                         self._lockout_count += 1
+                        self.posterior_sum_statescript_message(1, networkclient)
 
             elif self.target_sum_avg_2 > self.target_sum_avg_1:
-                if self.target_sum_avg_1 > self.posterior_arm_threshold - 0.1:
-                    if (self.norm_posterior_arm_sum_1[2]<0.2 and self.norm_posterior_arm_sum_1[3]<0.2 and 
-                        self.norm_posterior_arm_sum_1[4]<0.2 and self.norm_posterior_arm_sum_2[2]<0.2 and
-                        self.norm_posterior_arm_sum_2[3]<0.2 and self.norm_posterior_arm_sum_2[4]<0.2):
+                if self.target_sum_avg_1 > self.second_post_sum_thresh:
+                    if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh) and 
+                        np.all(self.norm_posterior_arm_sum_2[self.other_arms]<self.other_arm_thresh) ):
                         #print('arm1 end detected decode 2',self.target_sum_avg_1 ,self.target_sum_avg_2)
                         self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_2
-                        self.posterior_sum_statescript_message(1, networkclient)
+                        #print(self._in_lockout)
                         self._in_lockout = True
-                        self._last_lockout_timestamp = self.bin_timestamp
-                        self._lockout_count += 1              
+                        self._last_lockout_timestamp = self.bin_timestamp_1
+                        self._lockout_count += 1
+                        self.posterior_sum_statescript_message(1, networkclient)              
 
         # marker for non-local event - i think this should be specific location of replay target
         # need to lower for 4 arm (20?, 30?)
@@ -1081,12 +1089,14 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         # end lockout for non-local event
         # also using a timer - 200 msec
-        if (self._in_lockout and self.bin_timestamp > self._last_lockout_timestamp + self._lockout_time):
+        # was bin_timestamp, now try lfp_timestamp
+        if (self._in_lockout and self.bin_timestamp_1 > (self._last_lockout_timestamp + self._lockout_time)):
             self._in_lockout = False
             self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
                               self.bin_timestamp, time, self._lockout_count, self._in_lockout,
                               0, self.big_rip_message_sent, self.spike_count)
-            print('non local event end. num:',self._lockout_count,'timestamp',self.bin_timestamp)
+            #print('non local event end. num:',self._lockout_count,'current',self.bin_timestamp_1,
+            #    'last',self._last_lockout_timestamp,'lock time',self._lockout_time)
             self._lockout_count += 1
             #print('ripple lockout ended. time:',np.around(timestamp/30,decimals=2))
 
