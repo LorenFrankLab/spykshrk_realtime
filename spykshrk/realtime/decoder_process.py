@@ -247,9 +247,9 @@ class PointProcessDecoder(rt_logging.LoggingClass):
             self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
         elif self.number_arms == 2:
             #sun god
-            #self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+            self.arm_coords = np.array([[0,8],[13,24],[29,40]])
             #tree track
-            self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+            #self.arm_coords = np.array([[0,12],[17,41],[46,70]])
 
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins_1 = np.arange(0, self.max_pos, 1)
@@ -687,7 +687,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                            'raw_x', 'raw_y', 'smooth_x', 'smooth_y', 'spike_count', 'next_bin',
                                                            'taskState','ripple', 'ripple_number', 'ripple_length', 'shortcut_message',
                                                            'box', 'arm1', 'arm2', 'arm3', 'arm4', 'arm5', 'arm6', 'arm7', 'arm8',
-                                                           'cred_int','dec_rank'] +
+                                                           'cred_int','dec_rank','dropped_spikes','duplicated_spikes'] +
                                                           ['x{:0{dig}d}'.
                                                            format(x, dig=len(str(config['encoder']
                                                                                  ['position']['bins'])))
@@ -702,10 +702,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                           ['bin_timestamp', 'bin', 'raw_x', 'raw_y',
                                                            'segment', 'pos_on_seg',
                                                            'linear_pos', 'velocity','dec_rank'] + ['x{:0{dig}d}'.
-                                                                                        format(x, dig=len(str(config['encoder']
-                                                                                                              ['position']['bins'])))
-                                                                                        for x in range(config['encoder']['position']['bins'])]],
-                                              rec_formats=['qdddddddqqqqqqqddddddddddq' + 'd' * config['encoder']['position']['bins'],
+                                                                        format(x, dig=len(str(config['encoder']['position']['bins'])))
+                                                                                for x in range(config['encoder']['position']['bins'])]],
+                                              rec_formats=['qdddddddqqqqqqqddddddddddqqq' + 'd' * config['encoder']['position']['bins'],
                                                            'qddqq' + 'd' *
                                                            config['encoder']['position']['bins'],
                                                            'qiii',
@@ -867,10 +866,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
                                    datatype=datatypes.Datatypes.SPIKES, label='dec_recv')            
 
-        # new version of decoder that runs with every LFP timestamp
+        # new version of decoder that runs every decoding time bin
         # note we only want this to run every 6 msec, so need something to check the lfp timestamp
         # we could start this only after 10 spikes have been received
-        if (lfp_timekeeper is not None and self.lfp_timekeeper_counter % 9 == 0 and
+        if (lfp_timekeeper is not None and self.lfp_timekeeper_counter % (self.time_bin_size/20) == 0 and
              lfp_timekeeper.elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]):
             #self.config['trodes_network']['ripple_tetrodes'][0]
             #print('posterior loop',self.lfp_timekeeper_counter,lfp_timekeeper.timestamp,(lfp_timekeeper.timestamp-2*6*30))
@@ -881,9 +880,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
             # find rows in array that are -12 to -6 msec behind current timestamp
             posterior_spikes = self.decoded_spike_array[(self.decoded_spike_array[:,0]>
-                                                        (lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size))&
-                                                        (self.decoded_spike_array[:,0]<
-                                                        (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size))]
+                                    (lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size))&
+                                    (self.decoded_spike_array[:,0]<
+                                    (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size))]
             if posterior_spikes.shape[0] > 0:
                 #print(self.lfp_timekeeper_counter)
                 #print(lfp_timekeeper.timestamp/30)
@@ -892,30 +891,14 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #self.spike_count = posterior_spikes.shape[0]
                 # set last column in decoded_spike_array to 1 - might be able to do this directly to posterior_spikes
                 self.decoded_spike_array[np.where((self.decoded_spike_array[:,0]>
-                                                (lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size))&
-                                                (self.decoded_spike_array[:,0]<
-                                                (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size)))[0][:],-1] = 1
+                                        (lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size))&
+                                        (self.decoded_spike_array[:,0]<
+                                        (lfp_timekeeper.timestamp-(self.decoder_bin_delay-1)*self.time_bin_size)))[0][:],-1] = 1
 
                 # check for multiple timestamps here - if tet list is split in 2 we can just remove any duplicates
 
-                # CURRENT VERSION for removing duplicate spikes
-                # # try again with conversion to pandas, drop dups
-                # #print(posterior_spikes.shape)
-                # spikes_before = posterior_spikes.shape[0]
-                # posterior_spikes_pandas = pd.DataFrame(posterior_spikes)
-                # #print(posterior_spikes_pandas.shape)
-                # #print(posterior_spikes_pandas)
-                # posterior_spikes_pandas.drop_duplicates(subset=0,keep=False,inplace=True)
-                # #print(posterior_spikes_pandas.shape)
-                # posterior_spikes = posterior_spikes_pandas.to_numpy()
-                # #print(posterior_spikes.shape)
-                # spikes_after = posterior_spikes.shape[0]
-                # if spikes_before != spikes_after:
-                #     #print('dup spikes',spikes_before,spikes_after)
-                #     self.duplicate_spikes += (spikes_before-spikes_after)
-
                 # NEW VERSION: should be much faster than pandas conversion
-                # note: use `arr[tuple(seq)]` instead of `arr[seq]`. line 923
+                # note: use `arr[tuple(seq)]` instead of `arr[seq]`. line 907
                 #print(posterior_spikes.shape)
                 spikes_before = posterior_spikes.shape[0]
                 _, inds, counts = np.unique(posterior_spikes[:, 0], return_index=True, return_counts=True)
@@ -987,11 +970,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                       self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                       self.spike_count, self.used_next_bin, self.taskState,
                                       self.ripple_thresh_decoder, self.ripple_number, 
-                                      self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
+                                      self.ripple_time_bin, self.shortcut_message_sent,
                                       self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                       self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                       self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
-                                      self.posterior_arm_sum[0][8],self.rank,
+                                      self.posterior_arm_sum[0][8],self.crit_ind,self.rank,
+                                      np.int(self.dropped_spikes),np.int(self.duplicate_spikes),
                                       *posterior)                
                     
                 elif posterior_spikes.shape[0] == 0:
@@ -1042,11 +1026,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                       self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                       self.spike_count, self.used_next_bin, self.taskState,
                                       self.ripple_thresh_decoder, self.ripple_number, 
-                                      self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
+                                      self.ripple_time_bin, self.shortcut_message_sent,
                                       self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                       self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                       self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
-                                      self.posterior_arm_sum[0][8],self.rank,
+                                      self.posterior_arm_sum[0][8],self.crit_ind,self.rank,
+                                      np.int(self.dropped_spikes),np.int(self.duplicate_spikes),
                                       *posterior)                
 
             elif posterior_spikes.shape[0] == 0:
@@ -1095,11 +1080,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                   self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                                   self.spike_count, self.used_next_bin, self.taskState,
                                   self.ripple_thresh_decoder, self.ripple_number, 
-                                  self.ripple_time_bin, self.shortcut_message_sent, self.crit_ind,
+                                  self.ripple_time_bin, self.shortcut_message_sent,
                                   self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
                                   self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                   self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
-                                  self.posterior_arm_sum[0][8],self.rank,
+                                  self.posterior_arm_sum[0][8],self.crit_ind,self.rank,
+                                  np.int(self.dropped_spikes),np.int(self.duplicate_spikes),
                                   *posterior)                
                 
         # position and velocity loop

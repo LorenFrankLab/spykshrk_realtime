@@ -239,10 +239,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                       'shortcut_message_sent', 'ripple_number', 'posterior_time_bin', 'delay', 'velocity',
                                       'real_pos','spike_count', 'spike_count_base','taskState',
                                       'posterior_max_arm', 'content_threshold','ripple_end','credible_int',
-                                      'max_arm_repeats', 'box', 'arm1', 'arm2', 'arm3', 'arm4', 'arm5', 'arm6', 'arm7', 'arm8']],
+                                      'max_arm_repeats', 'target_1','target_2','box_1', 'arm1_1', 'arm2_1', 'arm3_1', 'arm4_1', 
+                                      'box_2', 'arm1_2', 'arm2_2', 'arm3_2','arm4_2']],
                          rec_formats=['Iii',
                                       'Idiiddi',
-                                      'IIidiiidddidiidididdddddddd'])
+                                      'IIidiiidddidiidididddddddddddd'])
         # NOTE: for binary files: I,i means integer, d means decimal
 
         self.rank = rank
@@ -335,7 +336,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self._trodes_message_lockout = self.config['ripple_conditioning']['shortcut_msg_lockout']
 
         # for continous running sum of posterior
-        self.running_post_sum_counter = 0
+        #self.running_post_sum_counter = 0
         self.posterior_sum_array_1 = np.zeros(
             (self.config['ripple_conditioning']['post_sum_sliding_window'], 9))
         self.sum_array_sum_1 = np.zeros((9,))
@@ -680,6 +681,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
               'delay 1:', np.around((self.lfp_timestamp - self.bin_timestamp_1) / 30, decimals=1),
               'delay 2:', np.around((self.lfp_timestamp - self.bin_timestamp_2) / 30, decimals=1),
               'spike count:', self.posterior_spike_count, 'sliding window:', self.post_sum_sliding_window_actual)
+        print('target 1',self.target_sum_avg_1,'target 2',self.target_sum_avg_2)
         #self.shortcut_message_arm = np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0]
         self.shortcut_message_arm = arm
 
@@ -788,10 +790,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                               (self.lfp_timestamp - self.bin_timestamp) / 30, self.velocity,self.linearized_position,
                               self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
                               self.shortcut_message_arm, self.posterior_arm_threshold, self.ripple_end, 
-                              self.credible_avg, self.max_arm_repeats,
-                              self.norm_posterior_arm_sum[0], self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
-                              self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], self.norm_posterior_arm_sum[5],
-                              self.norm_posterior_arm_sum[6], self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
+                              self.credible_avg, self.max_arm_repeats, self.target_sum_avg_1, self.target_sum_avg_2,
+                              self.norm_posterior_arm_sum_1[0], self.norm_posterior_arm_sum_1[1], self.norm_posterior_arm_sum_1[2],
+                              self.norm_posterior_arm_sum_1[3], self.norm_posterior_arm_sum_1[4], self.norm_posterior_arm_sum_2[0],
+                              self.norm_posterior_arm_sum_2[1], self.norm_posterior_arm_sum_2[2], self.norm_posterior_arm_sum_2[3],
+                              self.norm_posterior_arm_sum_2[4])
         else:
             print('more than ', self.max_arm_repeats,' replays of arm', arm, 'in a row!')
 
@@ -951,12 +954,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # ***ACTIVE***
         # sliding window sum of posterior at all times
 
-        self.running_post_sum_counter += 1
+        #self.running_post_sum_counter += 1
 
-        if self.running_post_sum_counter % 10000 == 0:
-            print('running sum of posterior', self.running_post_sum_counter)
+        if self.decoder_1_count % 10000 == 0:
+            print('running sum of posterior', self.decoder_1_count)
 
-        if self.thresh_counter % 500 == 0:
+        if self.thresh_counter % 3000 == 0:
             print('decoder1 delay',(self.lfp_timestamp - self.bin_timestamp_1) / 30,'count',self.decoder_1_count)
             print('decoder2 delay',(self.lfp_timestamp - self.bin_timestamp_2) / 30,'count',self.decoder_2_count)
             #print('lockout time',self._lockout_time)
@@ -969,12 +972,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         # sum of taget segment - want a sliding window average for this over 30 msec (5 bins)
         if self.dec_rank == self.config['rank']['decoder'][0]:
-            self.target_sum_array_1[np.mod(self.running_post_sum_counter,
+            self.target_sum_array_1[np.mod(self.decoder_1_count,
                                         self.config['ripple_conditioning']['post_sum_sliding_window'])] = self.target_post
             self.target_sum_avg_1 = self.target_sum_array_1.sum()/len(self.target_sum_array_1)
 
         elif self.dec_rank == self.config['rank']['decoder'][1]:
-            self.target_sum_array_2[np.mod(self.running_post_sum_counter,
+            self.target_sum_array_2[np.mod(self.decoder_2_count,
                                         self.config['ripple_conditioning']['post_sum_sliding_window'])] = self.target_post
             self.target_sum_avg_2 = self.target_sum_array_2.sum()/len(self.target_sum_array_2)
 
@@ -992,7 +995,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             # for whole ripple sum - add to this array but dont sum or normalize
             # NEW 10-17-20: calculate average here
-            self.posterior_sum_array_1[np.mod(self.running_post_sum_counter,
+            self.posterior_sum_array_1[np.mod(self.decoder_1_count,
                                         self.config['ripple_conditioning']['post_sum_sliding_window']), :] = new_posterior_sum
             self.sum_array_sum_1 = np.sum(self.posterior_sum_array_1, axis=0)
             self.norm_posterior_arm_sum_1 = self.sum_array_sum_1 / self.config['ripple_conditioning']['post_sum_sliding_window']
@@ -1004,20 +1007,20 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             # for whole ripple sum - add to this array but dont sum or normalize
             # NEW 10-17-20: calculate average here
-            self.posterior_sum_array_2[np.mod(self.running_post_sum_counter,
+            self.posterior_sum_array_2[np.mod(self.decoder_2_count,
                                         self.config['ripple_conditioning']['post_sum_sliding_window']), :] = new_posterior_sum
             self.sum_array_sum_2 = np.sum(self.posterior_sum_array_2, axis=0)
             self.norm_posterior_arm_sum_2 = self.sum_array_sum_2 / self.config['ripple_conditioning']['post_sum_sliding_window']
 
         # not using right now
         # keep track of decoder bin timestamp for posteriors in the sliding sum - check how many msec is total diff
-        self.posterior_sum_timestamps[np.mod(self.running_post_sum_counter,
+        self.posterior_sum_timestamps[np.mod(self.decoder_1_count,
                                              self.config['ripple_conditioning']['post_sum_sliding_window']), :] = self.bin_timestamp
         self.post_sum_sliding_window_actual = np.ptp(self.posterior_sum_timestamps) / 30
 
         # spike count baseline average
         # comment out to prevent updating
-        if self.running_post_sum_counter == 1:
+        if self.decoder_1_count == 1:
             print('initial spike count baseline:', np.around(self.spike_count_base_avg,decimals=3),
                                                     np.around(self.spike_count_base_std,decimals=3))
         # update spike count baseline if sleep session
@@ -1030,22 +1033,22 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                             / ((1000/(self.config['pp_decoder']['bin_size']/30))
                                                 *self.config['ripple_conditioning']['spike_count_window_sec'])) 
 
-        if self.running_post_sum_counter % 2000 == 0:
+        if self.decoder_1_count % 2000 == 0:
             print('spike count baseline. mean:', np.around(self.spike_count_base_avg,decimals=3),
                   'std:',np.around(self.spike_count_base_std,decimals=3),
                   'diff:',np.around(self.spike_count_base_avg-(0.5*self.spike_count_base_std),decimals=3))
 
-        if self.running_post_sum_counter % 30 == 0:
+        if self.decoder_1_count % 30 == 0:
             self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT, self.lfp_timestamp, 0, 0, 2,
                                   self.spike_count_base_avg, self.spike_count_base_std, self.spike_count)
 
         # sliding window sum of spike count
-        self.spk_count_window[0,np.mod(self.running_post_sum_counter,self.spk_count_window_len)] = self.spike_count
-        self.spk_count_avg[0,np.mod(self.running_post_sum_counter,
+        self.spk_count_window[0,np.mod(self.decoder_1_count,self.spk_count_window_len)] = self.spike_count
+        self.spk_count_avg[0,np.mod(self.decoder_1_count,
                                     self.spk_count_avg_history)] = np.average(self.spk_count_window)
 
         # sliding window average of credible interval
-        self.credible_window[0,np.mod(self.running_post_sum_counter,6)] = self.crit_ind
+        self.credible_window[0,np.mod(self.decoder_1_count,6)] = self.crit_ind
         self.credible_avg = np.average(self.credible_window)
 
 
@@ -1065,7 +1068,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                         #print(self._in_lockout)
                         self._in_lockout = True
                         self._last_lockout_timestamp = self.bin_timestamp_1
-                        self._lockout_count += 1
+                        #self._lockout_count += 1
                         self.posterior_sum_statescript_message(1, networkclient)
 
             elif self.target_sum_avg_2 > self.target_sum_avg_1:
@@ -1077,7 +1080,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                         #print(self._in_lockout)
                         self._in_lockout = True
                         self._last_lockout_timestamp = self.bin_timestamp_1
-                        self._lockout_count += 1
+                        #self._lockout_count += 1
                         self.posterior_sum_statescript_message(1, networkclient)              
 
         # marker for non-local event - i think this should be specific location of replay target

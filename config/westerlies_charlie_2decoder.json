@@ -21,7 +21,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "charlie_7_14_run3_2decoder_v11",
+        "prefix": "charlie_6_23_run2_2decoder_v7",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -36,16 +36,16 @@
         "session_type": "run",
         "instructive": 0,
         "posterior_sum_threshold": 0.5,
-        "second_post_sum_thresh": 0.3,
+        "second_post_sum_thresh": 0.5,
         "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
-        "post_sum_sliding_window": 6,
+        "post_sum_sliding_window": 9,
         "ripple_detect_velocity": 4,
         "spike_count_window_sec": 300,
         "previous_spike_count_avg": 1.312,
         "previous_spike_count_std": 0.931,
         "replay_target_arm": 1,
-        "replay_non_target_arm": [2,3,4],
+        "replay_non_target_arm": [2],
         "replay_target_start": 20,
         "replay_target_end": 24,
         "condition_rip_thresh": 100,
@@ -130,14 +130,14 @@
 
         "position": {
             "lower": 0,
-            "upper": 73,
-            "bins": 73,
-            "arm_pos": [[0, 72]]
+            "upper": 41,
+            "bins": 41,
+            "arm_pos": [[0, 40]]
         },
         "position_kernel": {
             "std": 5
         },
-        "vel": 0,
+        "vel": 8,
         "spk_amp": 120,
         "noise_max_amp": 1500,
         "dead_channels": {
@@ -159,9 +159,9 @@
     },
 
     "pp_decoder": {
-        "number_arms": 4,
+        "number_arms": 2,
         "bin_size": 180,
-        "trans_mat_uniform_gain": 0.001,
+        "trans_mat_uniform_gain": 0.01,
         "trans_mat_smoother_std": 3,
         "circle_buffer": 1000,
         "bin_delay": 2
