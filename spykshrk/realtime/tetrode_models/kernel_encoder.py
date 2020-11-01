@@ -95,19 +95,24 @@ class RSTKernelEncoder:
                                    self.param.pos_kernel_std)
 
         self.occupancy_counter = 1
+        self.display_occupancy = True
+        self.taskState = 1
 
         # define arm_coords for occupancy
         self.number_arms = self.config['pp_decoder']['number_arms']
-        if self.number_arms == 8:
-            self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]])
+        #if self.number_arms == 8:
+        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]])
         
         # for 2-arm tree track
-        elif self.number_arms == 2:
-            self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+        #elif self.number_arms == 2:
+        #    self.arm_coords = np.array([[0,12],[17,41],[46,70]])
         
         # for 4-arm sun god
-        elif self.number_arms == 4:
-            self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        #elif self.number_arms == 4:
+        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        
+        # define arm coords directly from config
+        self.arm_coords = np.array(self.config['encoder']['arm_coords'])
 
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins = np.arange(0,self.max_pos,1)
@@ -247,6 +252,11 @@ class RSTKernelEncoder:
         query_hist += 0.0000001
 
         # occupancy normalize
+        if self.taskState == 2 and self.display_occupancy:
+            print(self.pos_hist)
+            print((self.pos_hist/np.nansum(self.pos_hist)))
+            self.display_occupancy = False
+
         # MEC: added NaNs in the gaps between arms in self.pos_hist
         # MEC: normalize self.pos_hist to match offline decoder 
         query_hist = query_hist / (self.pos_hist/np.nansum(self.pos_hist))

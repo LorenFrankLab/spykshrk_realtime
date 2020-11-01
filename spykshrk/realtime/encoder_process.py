@@ -315,19 +315,20 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                    datatype=datatypes.Datatypes.SPIKES, label='kde_start')
                 # this looks up the current spike in the RStar Tree
                 # also filter out large noise events (start with 1500uV)
-                if not np.all(np.asarray(amp_marks)<self.config['encoder']['noise_max_amp']):
-                    print('large noise mark: positive')
-                    self.count_noise_events += 1
-                elif not np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp']):
-                    print('large noise mark: negative')
-                    self.count_noise_events += 1
-                if (max(amp_marks) > self.config['encoder']['spk_amp'] and 
-                    np.all(np.asarray(amp_marks)<self.config['encoder']['noise_max_amp']) and
-                    np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp'])):
+                # turn off this filter because we remove duplicates in decoder process now
+                #if not np.all(np.asarray(amp_marks)<self.config['encoder']['noise_max_amp']):
+                #    print('large noise mark: positive')
+                #    self.count_noise_events += 1
+                #elif not np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp']):
+                #    print('large noise mark: negative')
+                #    self.count_noise_events += 1
+                #if (max(amp_marks) > self.config['encoder']['spk_amp'] and 
+                #    np.all(np.asarray(amp_marks)<self.config['encoder']['noise_max_amp']) and
+                #    np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp'])):
+                if max(amp_marks) > self.config['encoder']['spk_amp']:
                     #print(datapoint.timestamp,datapoint.elec_grp_id, amp_marks)
                     query_result = self.encoders[datapoint.elec_grp_id]. \
-                        query_mark_hist(amp_marks,
-                                        datapoint.timestamp,
+                        query_mark_hist(amp_marks,datapoint.timestamp,
                                         datapoint.elec_grp_id)                # type: kernel_encoder.RSTKernelEncoderQuery
                     #print('decoded spike',query_result.query_hist)
 
@@ -387,7 +388,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
                         if self.spk_counter % 100 == 0 and self.rank == self.config['rank']['encoders'][0]:
                             print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
-                            print('number of noise events detected:',self.count_noise_events)
+                            #print('number of noise events detected:',self.count_noise_events)
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 

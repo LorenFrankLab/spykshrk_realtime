@@ -21,7 +21,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/34e4605c-c436-46d4-b43a-80da18b12d97/spykshrk_output",
-        "prefix": "charlie_6_17_run3_2decoder_v2",
+        "prefix": "charlie_6_23_run2_2decoder_v11",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -46,12 +46,12 @@
         "previous_spike_count_std": 0.931,
         "replay_target_arm": 1,
         "replay_non_target_arm": [2],
-        "replay_target": [20,24],
-        "replay_offtarget": [36,40],
+        "replay_target_start": 20,
+        "replay_target_end": 24,
         "condition_rip_thresh": 100,
         "shortcut_msg_lockout": 30000,
         "center_well_position": [469,604],
-        "center_well_dist": 100
+        "center_well_dist": 10
     },
 
     "ripple": {
@@ -139,7 +139,7 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 6,
+        "vel": 0,
         "spk_amp": 120,
         "noise_max_amp": 1500,
         "dead_channels": {

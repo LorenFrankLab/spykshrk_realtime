@@ -24,12 +24,13 @@ class PosteriorSum(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'IIddddddddddiiii'
+    _byte_format = 'IIdddddddddddiiii'
 
-    def __init__(self, bin_timestamp, spike_timestamp, target, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
+    def __init__(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
         self.target = target
+        self.offtarget = offtarget
         self.box = box
         self.arm1 = arm1
         self.arm2 = arm2
@@ -45,17 +46,17 @@ class PosteriorSum(rt_logging.PrintableMessage):
         self.rank = rank
 
     def pack(self):
-        return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.target, self.box,
-                           self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
+        return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.target, self.offtarget,
+                        self.box, self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
                            self.arm8, self.spike_count, self.crit_ind, self.posterior_max, self.rank)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, spike_timestamp, target, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank = struct.unpack(
+        bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank = struct.unpack(
             cls._byte_format, message_bytes)
-        return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, box=box, arm1=arm1, 
-                    arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, spike_count=spike_count,
-                   crit_ind=crit_ind, posterior_max=posterior_max, rank=rank)
+        return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, offtarget=offtarget,
+                box=box, arm1=arm1, arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, 
+                spike_count=spike_count,crit_ind=crit_ind, posterior_max=posterior_max, rank=rank)
 
 
 class VelocityPosition(rt_logging.PrintableMessage):
@@ -63,22 +64,24 @@ class VelocityPosition(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'Iidi'
+    _byte_format = 'Iiiidi'
 
-    def __init__(self, bin_timestamp, pos, vel, rank):
+    def __init__(self, bin_timestamp, raw_x, raw_y, pos, vel, rank):
         self.bin_timestamp = bin_timestamp
+        self.raw_x = raw_x
+        self.raw_y = raw_y
         self.pos = pos
         self.vel = vel
         self.rank = rank
 
     def pack(self):
-        return struct.pack(self._byte_format, self.bin_timestamp, self.pos, self.vel,self.rank)
+        return struct.pack(self._byte_format, self.bin_timestamp, self.raw_x, self.raw_y, self.pos, self.vel,self.rank)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, pos, vel, rank = struct.unpack(
+        bin_timestamp, raw_x, raw_y, pos, vel, rank = struct.unpack(
             cls._byte_format, message_bytes)
-        return cls(bin_timestamp=bin_timestamp, pos=pos, vel=vel, rank=rank)
+        return cls(bin_timestamp=bin_timestamp, raw_x=raw_x, raw_y=raw_y, pos=pos, vel=vel, rank=rank)
 
 
 class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
@@ -93,8 +96,8 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     # def sending posterior message to supervisor with POSTERIOR tag
-    def send_posterior_message(self, bin_timestamp, spike_timestamp, target, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
-        message = PosteriorSum(bin_timestamp, spike_timestamp, target, box,
+    def send_posterior_message(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
+        message = PosteriorSum(bin_timestamp, spike_timestamp, target, offtarget, box,
                                arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count,
                                crit_ind, posterior_max, rank)
         #print('stim_message: ',message)
@@ -105,8 +108,8 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
         #print('stim_message: ',message,self.config['rank']['decoder'],self.rank)
 
     # def sending velocity&position message to supervisor with VEL_POS tag
-    def send_vel_pos_message(self, bin_timestamp, pos, vel, rank):
-        message = VelocityPosition(bin_timestamp, pos, vel, rank)
+    def send_vel_pos_message(self, bin_timestamp, raw_x, raw_y, pos, vel, rank):
+        message = VelocityPosition(bin_timestamp, raw_x, raw_y, pos, vel, rank)
         #print('vel_message: ',message)
 
         self.comm.Send(buf=message.pack(),
@@ -240,16 +243,19 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.posterior_sum_result = np.zeros((1, 9))
 
         # make arm_coords conditional on number of arms
-        if self.number_arms == 8:
-            self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
-                                   77, 88], [93, 104], [109, 120], [125, 136]])
-        elif self.number_arms == 4:
-            self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
-        elif self.number_arms == 2:
-            #sun god
-            self.arm_coords = np.array([[0,8],[13,24],[29,40]])
-            #tree track
-            #self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+        #if self.number_arms == 8:
+        #    self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+        #                           77, 88], [93, 104], [109, 120], [125, 136]])
+        #elif self.number_arms == 4:
+        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        #elif self.number_arms == 2:
+        #   #sun god
+        #    #self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+        #    #two bent arms
+        #    #self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+
+        # now arm coords are defined in the config file
+        self.arm_coords = np.array(self.config['encoder']['arm_coords'])
 
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins_1 = np.arange(0, self.max_pos, 1)
@@ -490,7 +496,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
 
             # originally this was set to 10000
             self.pos_counter += 1
-            if self.pos_counter % 10000 == 0:
+            if self.pos_counter % 100 == 0 and self.taskState == 2:
                 print('decoder occupancy: ',self.occ)
                 print(' occupancy shape: ',self.occ.shape)
                 print('number of position entries decode: ', self.pos_counter)
@@ -779,6 +785,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.crit_ind = 0
         self.posterior_max = 0
         self.posterior_sum_target = 0
+        self.posterior_sum_offtarget = 0
 
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
@@ -944,14 +951,18 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.posterior_max = posterior.argmax()
 
                     # calculate sum of target segment
-                    self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
-                                                        self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+                    self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target'][0]:
+                                                        self.config['ripple_conditioning']['replay_target'][1] + 1].sum()
+                    # calculate sum of off-target segment
+                    self.posterior_sum_offtarget = posterior[self.config['ripple_conditioning']['replay_offtarget'][0]:
+                                                        self.config['ripple_conditioning']['replay_offtarget'][1] + 1].sum()                                            
 
                     # send posterior message to main process
                     # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                     self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
                                                          lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                         self.posterior_sum_target, self.posterior_arm_sum[0][0],
+                                                         self.posterior_sum_target, self.posterior_sum_offtarget, 
+                                                         self.posterior_arm_sum[0][0],
                                                          self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                          self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                          self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
@@ -1000,14 +1011,18 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.posterior_max = posterior.argmax()
 
                     # calculate sum of target segment
-                    self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
-                                                        self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+                    self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target'][0]:
+                                                        self.config['ripple_conditioning']['replay_target'][1] + 1].sum()
+                    # calculate sum of off-target segment
+                    self.posterior_sum_offtarget = posterior[self.config['ripple_conditioning']['replay_offtarget'][0]:
+                                                        self.config['ripple_conditioning']['replay_offtarget'][1] + 1].sum()                                                        
 
                     # send posterior message to main process
                     # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                     self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
                                                          lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                         self.posterior_sum_target, self.posterior_arm_sum[0][0],
+                                                         self.posterior_sum_target, self.posterior_sum_offtarget, 
+                                                         self.posterior_arm_sum[0][0],
                                                          self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                          self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                          self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
@@ -1054,14 +1069,18 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.posterior_max = posterior.argmax()
 
                 # calculate sum of target segment
-                self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target_start']:
-                                                    self.config['ripple_conditioning']['replay_target_end'] + 1].sum()
+                self.posterior_sum_target = posterior[self.config['ripple_conditioning']['replay_target'][0]:
+                                                    self.config['ripple_conditioning']['replay_target'][1] + 1].sum()
+                # calculate sum of off-target segment
+                self.posterior_sum_offtarget = posterior[self.config['ripple_conditioning']['replay_offtarget'][0]:
+                                                    self.config['ripple_conditioning']['replay_offtarget'][1] + 1].sum()                                                        
 
                 # send posterior message to main process
                 # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                 self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
                                                      lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                     self.posterior_sum_target, self.posterior_arm_sum[0][0],
+                                                     self.posterior_sum_target, self.posterior_sum_offtarget, 
+                                                     self.posterior_arm_sum[0][0],
                                                      self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
@@ -1139,7 +1158,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # send message VEL_POS to main_process so that shortcut message can by filtered by velocity and position
                 # note: used to send bin_timestamp, but main process doesnt use the timestamp for anything, so 
                 # we can use the pos data timestamp instead
-                self.mpi_send.send_vel_pos_message(pos_data.timestamp,
+                self.mpi_send.send_vel_pos_message(pos_data.timestamp, pos_data.x, pos_data.y,
                                                    current_pos, self.current_vel, self.rank)
 
                 self.pos_msg_counter += 1
