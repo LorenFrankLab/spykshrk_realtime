@@ -241,12 +241,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                       'posterior_max_arm', 'content_threshold','ripple_end','credible_int',
                                       'max_arm_repeats', 'replay_bin_length',
                                       'target_1','target_2','offtarget_1','offtarget_2',
-                                      'spike_count_1','spike_count_2',
+                                      'spike_count_1','spike_count_2','ripple_tets',
                                       'box_1', 'arm1_1', 'arm2_1', 'arm3_1', 'arm4_1', 
                                       'box_2', 'arm1_2', 'arm2_2', 'arm3_2','arm4_2']],
                          rec_formats=['Iii',
                                       'Idiiddi',
-                                      'IIidiiidddidiididiidddddddddddddddd'])
+                                      'IIidiiidddidiididiiddddddddddddddddd'])
         # NOTE: for binary files: I,i means integer, d means decimal
 
         self.rank = rank
@@ -316,6 +316,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.target_post = 0
         self.decoder_1_count = 0
         self.decoder_2_count = 0
+        self.ripple_num_tet_above = 0
+        self.ripple_tet_num_array = np.zeros((self.config['ripple_conditioning']['post_sum_sliding_window'],))
+        self.ripple_tet_num_avg = 0
 
         self.velocity = 0
         self.linearized_position = 0
@@ -475,7 +478,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         # NOTE: 10-17-20 not currently using ripple times for feedback
         # how can we turn this on if needed??
-        num_above = 0
+        #num_above = 0
         
         if self._enabled and self.config['ripple_conditioning']['session_type'] == 'run':
             self.thresh_counter += 1
@@ -488,7 +491,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #     #    #print('in conditoning lockout for ripple detection - one line per tetrode')
         #     #    pass
 
-        #     self._ripple_thresh_states.setdefault(elec_grp_id, 0)
+            self._ripple_thresh_states.setdefault(elec_grp_id, 0)
         #     self._conditioning_ripple_thresh_states.setdefault(elec_grp_id, 0)
 
         #     # only write state if state changed
@@ -496,11 +499,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #         self.write_record(realtime_base.RecordIDs.STIM_STATE,
         #                           timestamp, elec_grp_id, threshold_state)
 
-        #     # count number of tets above threshold for content ripple
-        #     self._ripple_thresh_states[elec_grp_id] = threshold_state
-        #     num_above = 0
-        #     for state in self._ripple_thresh_states.values():
-        #         num_above += state
+            # count number of tets above threshold for content ripple
+            self._ripple_thresh_states[elec_grp_id] = threshold_state
+            num_above = 0
+            for state in self._ripple_thresh_states.values():
+                num_above += state
+            self.ripple_num_tet_above = num_above
 
         #     # count number of tets above threshold for large ripple
         #     self._conditioning_ripple_thresh_states[elec_grp_id] = conditioning_thresh_state
@@ -703,6 +707,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
               'sliding window:', self.config['ripple_conditioning']['post_sum_sliding_window'])
         print('target',self.target_sum_avg_1,self.target_sum_avg_2,'offtarget',
                self.offtarget_sum_avg_1,self.offtarget_sum_avg_2)
+        print('ripple tetrodes',self.ripple_tet_num_array,self.ripple_tet_num_avg)
         #self.shortcut_message_arm = np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0]
         self.shortcut_message_arm = arm
 
@@ -820,7 +825,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                               self.config['ripple_conditioning']['post_sum_sliding_window'],
                               self.target_sum_avg_1, self.target_sum_avg_2,
                               self.offtarget_sum_avg_1, self.offtarget_sum_avg_2,
-                              self.spike_count_1,self.spike_count_2,
+                              self.spike_count_1,self.spike_count_2,self.ripple_tet_num_avg,
                               self.norm_posterior_arm_sum_1[0], self.norm_posterior_arm_sum_1[1], self.norm_posterior_arm_sum_1[2],
                               self.norm_posterior_arm_sum_1[3], self.norm_posterior_arm_sum_1[4], self.norm_posterior_arm_sum_2[0],
                               self.norm_posterior_arm_sum_2[1], self.norm_posterior_arm_sum_2[2], self.norm_posterior_arm_sum_2[3],
@@ -1060,6 +1065,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                         self.config['ripple_conditioning']['post_sum_sliding_window']), :] = new_posterior_sum
             self.sum_array_sum_1 = np.sum(self.posterior_sum_array_1, axis=0)
             self.norm_posterior_arm_sum_1 = self.sum_array_sum_1 / self.config['ripple_conditioning']['post_sum_sliding_window']
+
+            # make array of last 9 time bins for number tets above ripple threshold
+            self.ripple_tet_num_array[np.mod(self.decoder_1_count,
+                                        self.config['ripple_conditioning']['post_sum_sliding_window']), :] = self.ripple_num_tet_above
+            self.ripple_tet_num_avg = np.sum(self.ripple_tet_num_array, axis=0) / self.config['ripple_conditioning']['post_sum_sliding_window']            
         
         elif self.dec_rank == self.config['rank']['decoder'][1]:
             new_posterior_sum = np.asarray([self.box_post, self.arm1_post, self.arm2_post, self.arm3_post,
