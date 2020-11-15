@@ -1127,61 +1127,87 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # NOTE currently 2nd set of tetrodes cutoff is hard coded here
         # NOTE currently no velocity filter
         # for lockout try lfp_timestamp - how often are getting lfp messages???
-        if ((self.target_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout) or 
-            (self.target_sum_avg_2 > self.posterior_arm_threshold and not self._in_lockout)):
-            #self._in_lockout = True
-            if self.target_sum_avg_1 > self.target_sum_avg_2:
-                if self.target_sum_avg_2 > self.second_post_sum_thresh:
-                    if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh) and 
-                        np.all(self.norm_posterior_arm_sum_2[self.other_arms]<self.other_arm_thresh) ):
-                        #print('arm1 end detected decode 1',self.target_sum_avg_1 ,self.target_sum_avg_2)
-                        self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
-                        #print(self._in_lockout)
-                        self._in_lockout = True
-                        self._last_lockout_timestamp = self.bin_timestamp_1
-                        #self._lockout_count += 1
-                        self.posterior_sum_statescript_message(1, networkclient)
+        if self.config['ripple_conditioning']['number_of_decoders'] == 2:
+            if ((self.target_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout) or 
+                (self.target_sum_avg_2 > self.posterior_arm_threshold and not self._in_lockout)):
+                #self._in_lockout = True
+                if self.target_sum_avg_1 > self.target_sum_avg_2:
+                    if self.target_sum_avg_2 > self.second_post_sum_thresh:
+                        if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh) and 
+                            np.all(self.norm_posterior_arm_sum_2[self.other_arms]<self.other_arm_thresh) ):
+                            #print('arm1 end detected decode 1',self.target_sum_avg_1 ,self.target_sum_avg_2)
+                            self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
+                            #print(self._in_lockout)
+                            self._in_lockout = True
+                            self._last_lockout_timestamp = self.bin_timestamp_1
+                            #self._lockout_count += 1
+                            self.posterior_sum_statescript_message(1, networkclient)
 
-            elif self.target_sum_avg_2 > self.target_sum_avg_1:
-                if self.target_sum_avg_1 > self.second_post_sum_thresh:
-                    if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh) and 
-                        np.all(self.norm_posterior_arm_sum_2[self.other_arms]<self.other_arm_thresh) ):
-                        #print('arm1 end detected decode 2',self.target_sum_avg_1 ,self.target_sum_avg_2)
-                        self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_2
-                        #print(self._in_lockout)
-                        self._in_lockout = True
-                        self._last_lockout_timestamp = self.bin_timestamp_1
-                        #self._lockout_count += 1
-                        self.posterior_sum_statescript_message(1, networkclient)              
+                elif self.target_sum_avg_2 > self.target_sum_avg_1:
+                    if self.target_sum_avg_1 > self.second_post_sum_thresh:
+                        if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh) and 
+                            np.all(self.norm_posterior_arm_sum_2[self.other_arms]<self.other_arm_thresh) ):
+                            #print('arm1 end detected decode 2',self.target_sum_avg_1 ,self.target_sum_avg_2)
+                            self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_2
+                            #print(self._in_lockout)
+                            self._in_lockout = True
+                            self._last_lockout_timestamp = self.bin_timestamp_1
+                            #self._lockout_count += 1
+                            self.posterior_sum_statescript_message(1, networkclient)              
 
-        # check non-target arm end posterior
-        elif ((self.offtarget_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout) or 
-            (self.offtarget_sum_avg_2 > self.posterior_arm_threshold and not self._in_lockout)):
-            #self._in_lockout = True
-            #print('arm2 end')
-            if self.offtarget_sum_avg_1 > self.offtarget_sum_avg_2:
-                if self.offtarget_sum_avg_2 > self.second_post_sum_thresh:
-                    if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh) and 
-                        np.all(self.norm_posterior_arm_sum_2[self.replay_target_arm]<self.other_arm_thresh) ):
-                        #print('arm2 end detected decode 1',self.offtarget_sum_avg_1 ,self.offtarget_sum_avg_2)
-                        self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
-                        #print(self._in_lockout)
-                        self._in_lockout = True
-                        self._last_lockout_timestamp = self.bin_timestamp_1
-                        #self._lockout_count += 1
-                        self.posterior_sum_statescript_message(2, networkclient)
+            # check non-target arm end posterior
+            elif ((self.offtarget_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout) or 
+                (self.offtarget_sum_avg_2 > self.posterior_arm_threshold and not self._in_lockout)):
+                #self._in_lockout = True
+                #print('arm2 end')
+                if self.offtarget_sum_avg_1 > self.offtarget_sum_avg_2:
+                    if self.offtarget_sum_avg_2 > self.second_post_sum_thresh:
+                        if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh) and 
+                            np.all(self.norm_posterior_arm_sum_2[self.replay_target_arm]<self.other_arm_thresh) ):
+                            #print('arm2 end detected decode 1',self.offtarget_sum_avg_1 ,self.offtarget_sum_avg_2)
+                            self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
+                            #print(self._in_lockout)
+                            self._in_lockout = True
+                            self._last_lockout_timestamp = self.bin_timestamp_1
+                            #self._lockout_count += 1
+                            self.posterior_sum_statescript_message(2, networkclient)
 
-            elif self.offtarget_sum_avg_2 > self.offtarget_sum_avg_1:
-                if self.offtarget_sum_avg_1 > self.second_post_sum_thresh:
-                    if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh) and 
-                        np.all(self.norm_posterior_arm_sum_2[self.replay_target_arm]<self.other_arm_thresh) ):
-                        #print('arm2 end detected decode 2',self.offtarget_sum_avg_1 ,self.offtarget_sum_avg_2)
-                        self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_2
-                        #print(self._in_lockout)
-                        self._in_lockout = True
-                        self._last_lockout_timestamp = self.bin_timestamp_1
-                        #self._lockout_count += 1
-                        self.posterior_sum_statescript_message(2, networkclient) 
+                elif self.offtarget_sum_avg_2 > self.offtarget_sum_avg_1:
+                    if self.offtarget_sum_avg_1 > self.second_post_sum_thresh:
+                        if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh) and 
+                            np.all(self.norm_posterior_arm_sum_2[self.replay_target_arm]<self.other_arm_thresh) ):
+                            #print('arm2 end detected decode 2',self.offtarget_sum_avg_1 ,self.offtarget_sum_avg_2)
+                            self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_2
+                            #print(self._in_lockout)
+                            self._in_lockout = True
+                            self._last_lockout_timestamp = self.bin_timestamp_1
+                            #self._lockout_count += 1
+                            self.posterior_sum_statescript_message(2, networkclient) 
+
+        elif self.config['ripple_conditioning']['number_of_decoders'] == 1:
+            # send message for end of arm only in target_sum_avg_1
+            if (self.target_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout):
+                #self._in_lockout = True
+                if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh)):
+                    #print('arm1 end detected decode 1',self.target_sum_avg_1 ,self.target_sum_avg_2)
+                    self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
+                    #print(self._in_lockout)
+                    self._in_lockout = True
+                    self._last_lockout_timestamp = self.bin_timestamp_1
+                    #self._lockout_count += 1
+                    self.posterior_sum_statescript_message(1, networkclient)    
+
+            elif (self.offtarget_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout):
+                #self._in_lockout = True
+                #print('arm2 end')
+                if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh)):
+                    #print('arm2 end detected decode 1',self.offtarget_sum_avg_1 ,self.offtarget_sum_avg_2)
+                    self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
+                    #print(self._in_lockout)
+                    self._in_lockout = True
+                    self._last_lockout_timestamp = self.bin_timestamp_1
+                    #self._lockout_count += 1
+                    self.posterior_sum_statescript_message(2, networkclient)
 
         # marker for non-local event - i think this should be specific location of replay target
         # need to lower for 4 arm (20?, 30?)
