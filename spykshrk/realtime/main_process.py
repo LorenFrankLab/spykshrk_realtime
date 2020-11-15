@@ -1068,7 +1068,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             # make array of last 9 time bins for number tets above ripple threshold
             self.ripple_tet_num_array[np.mod(self.decoder_1_count,
-                                        self.config['ripple_conditioning']['post_sum_sliding_window']), :] = self.ripple_num_tet_above
+                                        self.config['ripple_conditioning']['post_sum_sliding_window'])] = self.ripple_num_tet_above
             self.ripple_tet_num_avg = np.sum(self.ripple_tet_num_array, axis=0) / self.config['ripple_conditioning']['post_sum_sliding_window']            
         
         elif self.dec_rank == self.config['rank']['decoder'][1]:
