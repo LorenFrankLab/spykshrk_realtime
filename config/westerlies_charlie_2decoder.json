@@ -44,6 +44,7 @@
         "spike_count_window_sec": 300,
         "previous_spike_count_avg": 1.312,
         "previous_spike_count_std": 0.931,
+        "number_of_decoders": 2,
         "replay_target_arm": 1,
         "replay_non_target_arm": [2],
         "replay_target": [20,24],
