@@ -327,60 +327,81 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         pos_bins = pos_bins_1
         number_arms = number_arms
 
-        from scipy.sparse import diags
+        # this for tri-diagonal matrix 
+        # from scipy.sparse import diags
+        # n = len(pos_bins)
+        # transition_mat = np.zeros([n, n])
+        # k = np.array([(1/3) * np.ones(n - 1), (1/3) *
+        #               np.ones(n), (1 / 3) * np.ones(n - 1)])
+        # offset = [-1, 0, 1]
+        # transition_mat = diags(k, offset).toarray()
+        # box_end_bin = arm_coords[0, 1]
+
+        # if number_arms == 8:
+        #     for x in arm_coords[:, 0]:
+        #         transition_mat[int(x), int(x)] = (5/9)
+        #         transition_mat[box_end_bin, int(x)] = (1/9)
+        #         transition_mat[int(x), box_end_bin] = (1/9)
+
+        # elif number_arms == 4:
+        #     for x in arm_coords[:,0]:
+        #         transition_mat[int(x),int(x)] = (7/15)
+        #         transition_mat[box_end_bin,int(x)] = (1/5)
+        #         transition_mat[int(x),box_end_bin] = (1/5)
+
+        # elif number_arms == 2:
+        #     for x in arm_coords[:,0]:
+        #         transition_mat[int(x),int(x)] = (1/3)
+        #         transition_mat[box_end_bin,int(x)] = (1/3)
+        #         transition_mat[int(x),box_end_bin] = (1/3)
+
+
+        # for y in arm_coords[:, 1]:
+        #     transition_mat[int(y), int(y)] = (2 / 3)
+
+        # transition_mat[box_end_bin, 0] = 0
+        # transition_mat[0, box_end_bin] = 0
+        # transition_mat[box_end_bin, box_end_bin] = 0
+        # transition_mat[0, 0] = (2 / 3)
+
+        # if number_arms == 8:
+        #     transition_mat[box_end_bin - 1, box_end_bin - 1] = (5/9)
+        #     transition_mat[box_end_bin - 1, box_end_bin] = (1/9)
+        #     transition_mat[box_end_bin, box_end_bin - 1] = (1/9)
+
+        # elif number_arms == 4:
+        #     transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
+        #     transition_mat[box_end_bin-1,box_end_bin] = (1/5)
+        #     transition_mat[box_end_bin, box_end_bin-1] = (1/5)
+
+        # elif number_arms == 2:
+        #     transition_mat[box_end_bin-1, box_end_bin-1] = (1/3)
+        #     transition_mat[box_end_bin-1,box_end_bin] = (1/3)
+        #     transition_mat[box_end_bin, box_end_bin-1] = (1/3)
+
+        # # uniform offset (gain, currently 0.0001)
+        # # 9-1-19 this is now taken from config file
+        # #uniform_gain = 0.0001
+        # uniform_dist = np.ones(transition_mat.shape) * uniform_gain
+
+        # # apply uniform offset
+        # transition_mat = transition_mat + uniform_dist
+
+        # # apply no animal boundary - make gaps between arms
+        # transition_mat = self.apply_no_anim_boundary(
+        #     pos_bins, arm_coords, transition_mat)
+
+        # # to smooth: take the transition matrix to a power
+        # transition_mat = np.linalg.matrix_power(transition_mat, 1)
+
+        # # normalize transition matrix
+        # transition_mat = transition_mat / (transition_mat.sum(axis=0)[None, :])
+
+        # transition_mat[np.isnan(transition_mat)] = 0
+
+        # this is for flat transition matrix
         n = len(pos_bins)
-        transition_mat = np.zeros([n, n])
-        k = np.array([(1/3) * np.ones(n - 1), (1/3) *
-                      np.ones(n), (1 / 3) * np.ones(n - 1)])
-        offset = [-1, 0, 1]
-        transition_mat = diags(k, offset).toarray()
-        box_end_bin = arm_coords[0, 1]
-
-        if number_arms == 8:
-            for x in arm_coords[:, 0]:
-                transition_mat[int(x), int(x)] = (5/9)
-                transition_mat[box_end_bin, int(x)] = (1/9)
-                transition_mat[int(x), box_end_bin] = (1/9)
-
-        elif number_arms == 4:
-            for x in arm_coords[:,0]:
-                transition_mat[int(x),int(x)] = (7/15)
-                transition_mat[box_end_bin,int(x)] = (1/5)
-                transition_mat[int(x),box_end_bin] = (1/5)
-
-        elif number_arms == 2:
-            for x in arm_coords[:,0]:
-                transition_mat[int(x),int(x)] = (1/3)
-                transition_mat[box_end_bin,int(x)] = (1/3)
-                transition_mat[int(x),box_end_bin] = (1/3)
-
-
-        for y in arm_coords[:, 1]:
-            transition_mat[int(y), int(y)] = (2 / 3)
-
-        transition_mat[box_end_bin, 0] = 0
-        transition_mat[0, box_end_bin] = 0
-        transition_mat[box_end_bin, box_end_bin] = 0
-        transition_mat[0, 0] = (2 / 3)
-
-        if number_arms == 8:
-            transition_mat[box_end_bin - 1, box_end_bin - 1] = (5/9)
-            transition_mat[box_end_bin - 1, box_end_bin] = (1/9)
-            transition_mat[box_end_bin, box_end_bin - 1] = (1/9)
-
-        elif number_arms == 4:
-            transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
-            transition_mat[box_end_bin-1,box_end_bin] = (1/5)
-            transition_mat[box_end_bin, box_end_bin-1] = (1/5)
-
-        elif number_arms == 2:
-            transition_mat[box_end_bin-1, box_end_bin-1] = (1/3)
-            transition_mat[box_end_bin-1,box_end_bin] = (1/3)
-            transition_mat[box_end_bin, box_end_bin-1] = (1/3)
-
-        # uniform offset (gain, currently 0.0001)
-        # 9-1-19 this is now taken from config file
-        #uniform_gain = 0.0001
+        transition_mat = np.zeros([n, n])        
         uniform_dist = np.ones(transition_mat.shape) * uniform_gain
 
         # apply uniform offset
