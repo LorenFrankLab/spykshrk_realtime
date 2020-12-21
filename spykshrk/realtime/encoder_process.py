@@ -448,8 +448,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 # currently smooth position and velocity
                 self.smooth_x = self.velCalc.smooth_x_position(datapoint.x)
                 self.smooth_y = self.velCalc.smooth_y_position(datapoint.y)
-                #self.current_vel = self.velCalc.calculator_no_smooth(self.smooth_x, self.smooth_y)
-                self.current_vel = self.velCalc.calculator(self.smooth_x, self.smooth_y)
+                self.current_vel = self.velCalc.calculator_no_smooth(self.smooth_x, self.smooth_y)
+                #self.current_vel = self.velCalc.calculator(self.smooth_x, self.smooth_y)
                 self.current_pos = self.linPosAssign.assign_position(datapoint.segment, datapoint.position)
                 #print('x smoothing: ',datapoint.x,self.smooth_x)
                 #print('y smoothing: ',datapoint.y,self.smooth_y)
@@ -536,8 +536,8 @@ class EncoderProcess(realtime_base.RealtimeProcess):
                                                                       config=self.config,
                                                                       datatype=datatypes.Datatypes.LINEAR_POSITION)
         elif self.config['datasource'] == 'trodes':
-            print('about to configure trdoes network for tetrode: ',self.rank)
-            time.sleep(1*self.rank)
+            print('about to configure network for decoding tetrode: ',self.rank)
+            #time.sleep(10+2*self.rank)
             spike_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
                                                                         rank=self.rank,
                                                                         config=self.config,

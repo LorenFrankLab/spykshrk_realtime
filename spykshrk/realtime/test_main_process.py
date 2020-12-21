@@ -3,6 +3,7 @@ import os
 import struct
 import sys
 import time
+import logging
 
 import numpy as np
 
@@ -104,20 +105,19 @@ class MainProcess(realtime_base.RealtimeProcess):
 
         self.manager = MainSimulatorManager(rank=rank, config=config, parent=self, send_interface=self.send_interface,
                                             stim_decider=self.stim_decider)
-        print('===============================')
-        print('In MainProcess: datasource = ', config['datasource'])
-        print('===============================')
+        logging.info('===============================')
+        #logging.info(f'In MainProcess: datasource = {config['datasource']}')
+        logging.info('===============================')
         if config['datasource'] == 'trodes':
-            print('about to configure trdoes network for tetrode: ',
-                  self.manager.handle_ntrode_list, self.rank)
-            time.sleep(5+1*self.rank)
+            logging.info(f'about to configure trodes network in main: {self.rank}')
 
             self.networkclient = MainProcessClient(
                 "SpykshrkMainProc", config['trodes_network']['address'], config['trodes_network']['port'], self.config)
             if self.networkclient.initialize() != 0:
-                print("Network could not successfully initialize")
+                logging.info("Main process network could not successfully initialize")
                 del self.networkclient
                 quit()
+
             # added MEC
             self.networkclient.initializeHardwareConnection()
             self.networkclient.registerStartupCallback(
@@ -127,7 +127,7 @@ class MainProcess(realtime_base.RealtimeProcess):
                 self.manager.handle_ripple_ntrode_list)
             self.networkclient.registerTerminationCallback(
                 self.manager.trigger_termination)
-            print('completed trodes setup')
+            logging.info('Main process completed trodes setup')
 
         self.vel_pos_recv_interface = VelocityPositionRecvInterface(comm=comm, rank=rank, config=config,
                                                                     stim_decider=self.stim_decider,
@@ -182,7 +182,6 @@ class MainProcess(realtime_base.RealtimeProcess):
 
 class StimulationDecision(rt_logging.PrintableMessage):
     """"Message containing whether or not at a given timestamp a ntrode's ripple filter threshold is crossed.
-
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
     _byte_format = 'Ii'
@@ -480,9 +479,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         # how can we turn this on if needed??
         #num_above = 0
         
-        # crashes here during sleep - try removing require for session type
-        #if self._enabled and self.config['ripple_conditioning']['session_type'] == 'run':
-        if self._enabled:
+        if self._enabled and self.config['ripple_conditioning']['session_type'] == 'run':
             self.thresh_counter += 1
 
         #     # if self.thresh_counter % 1500 == 0 and self._in_lockout:
@@ -1188,11 +1185,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         elif self.config['ripple_conditioning']['number_of_decoders'] == 1:
             # send message for end of arm only in target_sum_avg_1
-            # now requires both other arm and box to be < 0.2
             if (self.target_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout):
                 #self._in_lockout = True
-                if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh)
-                    and self.norm_posterior_arm_sum_1[0]<self.other_arm_thresh):
+                if (np.all(self.norm_posterior_arm_sum_1[self.other_arms]<self.other_arm_thresh)):
                     #print('arm1 end detected decode 1',self.target_sum_avg_1 ,self.target_sum_avg_2)
                     self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
                     #print(self._in_lockout)
@@ -1204,8 +1199,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             elif (self.offtarget_sum_avg_1 > self.posterior_arm_threshold and not self._in_lockout):
                 #self._in_lockout = True
                 #print('arm2 end')
-                if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh)
-                    and self.norm_posterior_arm_sum_1[0]<self.other_arm_thresh):
+                if (np.all(self.norm_posterior_arm_sum_1[self.replay_target_arm]<self.other_arm_thresh)):
                     #print('arm2 end detected decode 1',self.offtarget_sum_avg_1 ,self.offtarget_sum_avg_2)
                     self.norm_posterior_arm_sum = self.norm_posterior_arm_sum_1
                     #print(self._in_lockout)

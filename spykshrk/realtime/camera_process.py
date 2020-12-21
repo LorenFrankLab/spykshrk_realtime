@@ -252,7 +252,7 @@ class VelocityCalculator:
         self.smooth_y = 0
 
         #this is the number of speed or position measurements used to smooth - original = 30
-        self.NSPEED_FILT_POINTS = 6
+        self.NSPEED_FILT_POINTS = 4
         self.speed = [0] * self.NSPEED_FILT_POINTS
         self.speedFilt = [0] * self.NSPEED_FILT_POINTS
         self.x_pos = [0] * self.NSPEED_FILT_POINTS
@@ -268,7 +268,10 @@ class VelocityCalculator:
 
         # new filter for 6 points instead of 30
         # for this filter need velocity cut-off of about 6 cm/sec
-        self.speedFilterValues = [0.21491511, 0.20760799, 0.1891253, 0.16161616, 0.12894907, 0.09778637]
+        #self.speedFilterValues = [0.21491511, 0.20760799, 0.1891253, 0.16161616, 0.12894907, 0.09778637]
+
+        # filter with 4 points
+        self.speedFilterValues = [0.31, 0.29, 0.25, 0.15]
 
         # new filter for 8 points instead of 30
         #self.speedFilterValues = [0.14753615, 0.14606078, 0.14148716, 0.13425789, 0.12540572, 0.11404544,

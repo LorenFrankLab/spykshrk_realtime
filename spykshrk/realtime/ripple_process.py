@@ -360,7 +360,7 @@ class RippleFilter(rt_logging.LoggingClass):
                     self.param.ripple_threshold = np.int(new_ripple_threshold[4:7])/10
 
                 # only print for one ripple process, rank 3
-                if rank == self.config['rank']['ripples'][1]:
+                if rank == self.config['rank']['ripples'][0]:
                     print('conditioning ripple threshold = ',self.conditioning_ripple_threshold,
                           'content ripple threshold = ',self.param.ripple_threshold)
 
@@ -753,7 +753,7 @@ class RippleProcess(realtime_base.RealtimeProcess):
                                                                     datatype=datatypes.Datatypes.LFP)
         elif self.config['datasource'] == 'trodes':
             print('about to configure trdoes network for ripple tetrode: ',self.rank)
-            time.sleep(1*self.rank)
+            #time.sleep(10 + 2*self.rank)
             data_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
                                                                                 rank=self.rank,
                                                                                 config=self.config,

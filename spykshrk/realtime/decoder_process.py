@@ -1150,9 +1150,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # now try smooth position and then velocity
                 self.smooth_x = self.velCalc.smooth_x_position(pos_data.x)
                 self.smooth_y = self.velCalc.smooth_y_position(pos_data.y)
-                #self.current_vel = self.velCalc.calculator_no_smooth(self.smooth_x, self.smooth_y)
-                self.current_vel = self.velCalc.calculator(
-                    self.smooth_x, self.smooth_y)
+                self.current_vel = self.velCalc.calculator_no_smooth(self.smooth_x, self.smooth_y)
+                #self.current_vel = self.velCalc.calculator(self.smooth_x, self.smooth_y)
                 current_pos = self.linPosAssign.assign_position(
                     pos_data.segment, pos_data.position)
 
@@ -1185,9 +1184,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.pos_msg_counter += 1
                 # this prints position and velocity every 5 sec (150)
                 if self.pos_msg_counter % 150 == 0:
-                    print('position = ', current_pos, ' and velocity = ', np.around(self.current_vel, decimals=2),
-                          'smooth velocity = ', np.around(
-                              self.smooth_vel, decimals=2), 'segment = ', pos_data.segment,
+                    print('position =', current_pos, ' and velocity =', np.around(self.current_vel, decimals=2),
+                          'segment =', pos_data.segment,
                           'smooth_x', np.around(self.smooth_x, decimals=2), 'smooth_y', np.around(self.smooth_y, decimals=2))
 
 
