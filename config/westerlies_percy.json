@@ -5,8 +5,8 @@
     "rank": {
         "supervisor": 0,
         "decoder": [1],
-        "ripples": [2],
-        "encoders": [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+        "ripples": [2,3,4,5],
+        "encoders": [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
     },
 
     "rank_settings": {
@@ -15,13 +15,13 @@
     },
 
     "tetrode_split": {
-        "1st_half": [1,6,7,8,44,46,47,48,54,55,61,57,59,62,15,16,31,34,36],
+        "1st_half": [1, 6, 15, 18, 28, 29, 31, 34, 36, 44, 46, 47, 51, 59, 48,7],
         "2nd_half": []
     },
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "percy_12_20_run2",
+        "prefix": "percy_12_26_run3",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -39,7 +39,7 @@
         "second_post_sum_thresh": 0.5,
         "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
-        "post_sum_sliding_window": 9,
+        "post_sum_sliding_window": 8,
         "ripple_detect_velocity": 4,
         "spike_count_window_sec": 300,
         "previous_spike_count_avg": 1.312,
@@ -50,9 +50,11 @@
         "replay_target": [20,24],
         "replay_offtarget": [36,40],
         "condition_rip_thresh": 100,
-        "shortcut_msg_lockout": 30000,
+        "shortcut_msg_lockout": 60000,
         "center_well_position": [641,646],
-        "center_well_dist": 200
+        "center_well_dist": 20,
+        "enc_cred_int_max": 5,
+        "min_unique_tets": 2
     },
 
     "ripple": {
@@ -74,12 +76,42 @@
             "update_custom_baseline": false
         },
         "CustomRippleBaselineMeanMessage": {
-            " 7 ": 10.95 , 
-            " 14 ": 8.43  
+            " 6 ": 9.4,
+            " 18 ": 11.27,
+            " 34 ": 6.84,
+            " 47 ": 9.59,
+            " 16 ": 7.03,
+            " 29 ": 6.94,
+            " 44 ": 10.22,
+            " 59 ": 9.26,
+            " 15 ": 8.47,
+            " 31 ": 8.18,
+            " 46 ": 12.24,
+            " 62 ": 7.16,
+            " 1 ": 9.28,
+            " 28 ": 11.95,
+            " 36 ": 8.66,
+            " 51 ": 11.04
+ 
         },
         "CustomRippleBaselineStdMessage": {
-            " 7 ": 8.03 ,
-            " 14 ": 6.13 
+            " 6 ": 6.39,
+            " 18 ": 7.89,
+            " 34 ": 4.34,
+            " 47 ": 6.59,
+            " 16 ": 4.38,
+            " 29 ": 4.48,
+            " 44 ": 7.2,
+            " 59 ": 6.41,
+            " 15 ": 5.74,
+            " 31 ": 5.46,
+            " 46 ": 8.59,
+            " 62 ": 4.69,
+            " 1 ": 6.45,
+            " 28 ": 8.53,
+            " 36 ": 5.78,
+            " 51 ": 7.61
+ 
         }
     }, 
 
@@ -107,7 +139,7 @@
         "spk_amp": 100,
         "noise_max_amp": 1500,
         "dead_channels": {
-            "7": [3],
+            "7": 3,
             "61": [3],
             "16": 3,
             "36": 3
@@ -136,7 +168,7 @@
     "trodes_network": {
         "address" : "tcp://127.0.0.1",
         "port": 49152,
-        "decoding_tetrodes": [1,6,7,8,44,46,47,48,54,55,61,57,59,62,15,16,31,34,36],
-        "ripple_tetrodes": [7]
+        "decoding_tetrodes": [1, 6, 15, 18, 28, 29, 31, 34, 36, 44, 46, 47, 51, 59, 48,7],
+        "ripple_tetrodes": [1, 6, 15, 18]
     }
 }

@@ -66,13 +66,14 @@ class NoSpikeTimerThread(Thread):
 
 class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
 
-    _header_byte_fmt = '=qidi'
+    _header_byte_fmt = '=qidqi'
     _header_byte_len = struct.calcsize(_header_byte_fmt)
 
-    def __init__(self, timestamp, elec_grp_id, current_pos, pos_hist):
+    def __init__(self, timestamp, elec_grp_id, current_pos, cred_int, pos_hist):
         self.timestamp = timestamp
         self.elec_grp_id = elec_grp_id
         self.current_pos = current_pos
+        self.cred_int = cred_int
         self.pos_hist = pos_hist
 
     def pack(self):
@@ -84,6 +85,7 @@ class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
                                     self.timestamp,
                                     self.elec_grp_id,
                                     self.current_pos,
+                                    self.cred_int,
                                     pos_hist_byte_len)
 
         message_bytes = message_bytes + self.pos_hist.tobytes()
@@ -92,13 +94,13 @@ class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
 
     @classmethod
     def unpack(cls, message_bytes):
-        timestamp, elec_grp_id, current_pos, pos_hist_len = struct.unpack(cls._header_byte_fmt,
-                                                                                 message_bytes[0:cls._header_byte_len])
+        timestamp, elec_grp_id, current_pos, cred_int, pos_hist_len = struct.unpack(cls._header_byte_fmt,
+                                                                    message_bytes[0:cls._header_byte_len])
 
         pos_hist = np.frombuffer(message_bytes[cls._header_byte_len:cls._header_byte_len+pos_hist_len])
 
         return cls(timestamp=timestamp, elec_grp_id=elec_grp_id,
-                   current_pos=current_pos, pos_hist=pos_hist)
+                   current_pos=current_pos, cred_int=cred_int, pos_hist=pos_hist)
 
 
 class EncoderMPISendInterface(realtime_base.RealtimeMPIClass):
@@ -151,13 +153,14 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                                                'position'],
                                                               ['timestamp',
                                                                'elec_grp_id','ch1','ch2','ch3','ch4',
-                                                               'position','velocity','encode_spike','decoder_num'] +
+                                                               'position','velocity','encode_spike',
+                                                               'cred_int','decoder_num'] +
                                                               ['x{:0{dig}d}'.
                                                                format(x, dig=len(str(config['encoder']
                                                                                      ['position']['bins'])))
                                                                for x in range(config['encoder']['position']['bins'])]],
                                                   rec_formats=['qidd',
-                                                               'qiddddddqq'+'d'*config['encoder']['position']['bins']])
+                                                               'qiddddddqqq'+'d'*config['encoder']['position']['bins']])
 
         self.rank = rank
         self.config = config
@@ -197,6 +200,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_elec_grp_id = 0
         self.decoder_number = 0
         self.encoding_spike = 0
+
+        self.spxx = []
+        self.crit_ind = 0
 
         # taskState variable for adding spikes to encoding model
         # set to 0 to test loading the old tree - will turn off new mark and use old occupancy in kernel_encoder
@@ -353,12 +359,22 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     else:
                         self.encoding_spike = 0
 
+                    # add credible interval here and add to message
+                    # for this we will use 50% not 95%
+                    self.spxx = np.sort(query_result.query_hist)[::-1]
+                    self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.5, prepend=False))[0] + 1)[0]
+                    # okay - this seems to be accurate
+                    #if datapoint.elec_grp_id == 2:
+                    #    print(self.crit_ind)
+                    #    print(query_result.query_hist)
+
                     # save query_weights instead of query_hist: this will save number of spikes in rectangle
                     self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
                                       query_result.query_time,
                                       query_result.elec_grp_id,
                                       amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
-                                      self.current_pos,self.current_vel,self.encoding_spike,self.decoder_number,
+                                      self.current_pos,self.current_vel,self.encoding_spike,
+                                      self.crit_ind,self.decoder_number,
                                       *query_result.query_hist)
 
                     # weights have constantly changing size and are very small numbers - how to get # marks??
@@ -368,9 +384,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     #                   datatype=datatypes.Datatypes.SPIKES, label='spk_dec')
 
                     self.mpi_send.send_decoded_spike(SpikeDecodeResultsMessage(timestamp=query_result.query_time,
-                                                                               elec_grp_id=
-                                                                               query_result.elec_grp_id,
+                                                                               elec_grp_id=query_result.elec_grp_id,
                                                                                current_pos=self.current_pos,
+                                                                               cred_int=self.crit_ind,
                                                                                pos_hist=query_result.query_hist))
                     #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
 

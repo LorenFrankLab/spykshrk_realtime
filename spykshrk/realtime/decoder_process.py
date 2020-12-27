@@ -24,9 +24,9 @@ class PosteriorSum(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'IIdddddddddddiiii'
+    _byte_format = 'IIdddddddddddiiiiiiiii'
 
-    def __init__(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
+    def __init__(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5):
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
         self.target = target
@@ -44,19 +44,26 @@ class PosteriorSum(rt_logging.PrintableMessage):
         self.crit_ind = crit_ind
         self.posterior_max = posterior_max
         self.rank = rank
+        self.tet1 = tet1
+        self.tet2 = tet2
+        self.tet3 = tet3
+        self.tet4 = tet4
+        self.tet5 = tet5
 
     def pack(self):
         return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.target, self.offtarget,
                         self.box, self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
-                           self.arm8, self.spike_count, self.crit_ind, self.posterior_max, self.rank)
+                           self.arm8, self.spike_count, self.crit_ind, self.posterior_max, self.rank,
+                           self.tet1,self.tet2,self.tet3,self.tet4,self.tet5)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank = struct.unpack(
+        bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5 = struct.unpack(
             cls._byte_format, message_bytes)
         return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, offtarget=offtarget,
                 box=box, arm1=arm1, arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, 
-                spike_count=spike_count,crit_ind=crit_ind, posterior_max=posterior_max, rank=rank)
+                spike_count=spike_count,crit_ind=crit_ind, posterior_max=posterior_max, rank=rank,
+                tet1=tet1,tet2=tet2,tet3=tet3,tet4=tet4,tet5=tet5)
 
 
 class VelocityPosition(rt_logging.PrintableMessage):
@@ -96,10 +103,10 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     # def sending posterior message to supervisor with POSTERIOR tag
-    def send_posterior_message(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank):
+    def send_posterior_message(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank, tet1,tet2,tet3,tet4,tet5):
         message = PosteriorSum(bin_timestamp, spike_timestamp, target, offtarget, box,
                                arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count,
-                               crit_ind, posterior_max, rank)
+                               crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5)
         #print('stim_message: ',message)
 
         self.comm.Send(buf=message.pack(),
@@ -794,11 +801,13 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.taskState = 1
         self.duplicate_spikes = 0
         self.decoder_timestamp = 0
+        self.enc_cred_int_array = [0,0,0,0,0]
+        self.spikes_in_bin = 0
 
         # circular buffer for decoder
         self.decoded_spike_counter = 0
         self.spike_buffer_size = self.config['pp_decoder']['circle_buffer']
-        self.decoded_spike_array = np.zeros((self.spike_buffer_size, self.config['encoder']['position']['bins']+3))
+        self.decoded_spike_array = np.zeros((self.spike_buffer_size, self.config['encoder']['position']['bins']+4))
         self.decoder_bin_delay = self.config['pp_decoder']['bin_delay']
 
         # credible interval and posterior max
@@ -865,9 +874,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         if spike_dec_msg is not None:
             #print('spike timestamp',spike_dec_msg.timestamp)
 
+            # NOTE: need to add encoder cred int to this array
             self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 0] = spike_dec_msg.timestamp
             self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 1] = spike_dec_msg.elec_grp_id
-            self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 2:-1] = spike_dec_msg.pos_hist
+            self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 2] = spike_dec_msg.cred_int            
+            self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), 3:-1] = spike_dec_msg.pos_hist
             self.decoded_spike_array[np.mod(self.decoded_spike_counter,self.spike_buffer_size), -1] = 0
 
             if np.mod(self.decoded_spike_counter,self.spike_buffer_size) == 0 and self.decoded_spike_counter > 0:
@@ -882,8 +893,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #                  np.int(missed_spike_array[line,0]), np.int(missed_spike_array[line,1]),
                 #                  0, self.decoder_timestamp-self.decoder_bin_delay*self.time_bin_size)
             if self.lfp_timekeeper_counter % 1000 == 0:
-                print(self.rank, 'number of dropped spikes:',self.dropped_spikes)
-                print(self.rank, 'duplicated spikes:',self.duplicate_spikes)
+                print(self.rank,'total spikes:',self.decoded_spike_counter,
+                    'dropped spikes:',self.dropped_spikes, 'duplicated spikes:',self.duplicate_spikes)
                 #print('ripple tet',self.config['trodes_network']['ripple_tetrodes'][0])
                 #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
                 #print(self.decoded_spike_array[:,-1])
@@ -892,7 +903,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
             if self.msg_counter % 100 == 0:
                 self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='dec_recv')            
+                                   datatype=datatypes.Datatypes.SPIKES, label='dec_recv')   
+            #if self.msg_counter % 100 == 0:
+            #    print('in decoder, spike credible interval',spike_dec_msg.cred_int) 
 
         # new version of decoder that runs every decoding time bin
         # note we only want this to run every 6 msec, so need something to check the lfp timestamp
@@ -943,12 +956,23 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # run add observation
                 if posterior_spikes.shape[0] > 0:
                     self.spike_count = posterior_spikes.shape[0]
+                    self.enc_cred_int_array = [0,0,0,0,0]
+                    self.spikes_in_bin = 0
 
                     for i in range(0, posterior_spikes.shape[0]):
+                        self.spikes_in_bin += 1
                         self.pp_decoder.add_observation(spk_elec_grp_id=posterior_spikes[i,1],
-                                                spk_pos_hist=posterior_spikes[i,2:-1],
+                                                spk_pos_hist=posterior_spikes[i,3:-1],
                                                 vel_data=self.current_vel, taskState=self.taskState)
+
+                        # check credible interval for each spike, if good add elec_grp_id to list
+                        # this list is [0,0,0,0,0] and gets filled with each decoded spike
+                        # then send all values to main and pick-out non-zero there
+                        if posterior_spikes[i,2] <= self.config['ripple_conditioning']['enc_cred_int_max']:
+                            self.enc_cred_int_array[np.mod(self.spikes_in_bin,5)] = np.int(posterior_spikes[i,1])
                
+                    #print(self.enc_cred_int_array)
+
                     # run increment bin: to calculate like and posterior
                     posterior, likelihood = self.pp_decoder.increment_bin()
                     
@@ -988,7 +1012,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                          self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                          self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
                                                          self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
-                                                         self.spike_count,self.crit_ind,self.posterior_max,self.rank)
+                                                         self.spike_count,self.crit_ind,self.posterior_max,self.rank,
+                                                         self.enc_cred_int_array[0],self.enc_cred_int_array[1],
+                                                         self.enc_cred_int_array[2],self.enc_cred_int_array[3],
+                                                         self.enc_cred_int_array[4])
 
                     # save posterior and likelihood
                     self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
@@ -1048,7 +1075,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                          self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                          self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
                                                          self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
-                                                         self.spike_count,self.crit_ind,self.posterior_max,self.rank)
+                                                         self.spike_count,self.crit_ind,self.posterior_max,self.rank,
+                                                         0,0,0,0,0)
 
                     # save posterior and likelihood
                     self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
@@ -1106,7 +1134,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                                                      self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6],
                                                      self.posterior_arm_sum[0][7], self.posterior_arm_sum[0][8],
-                                                     self.spike_count,self.crit_ind,self.posterior_max,self.rank)
+                                                     self.spike_count,self.crit_ind,self.posterior_max,self.rank,
+                                                     0,0,0,0,0)
 
                 # save posterior and likelihood
                 self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,

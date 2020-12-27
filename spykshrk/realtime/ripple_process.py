@@ -353,7 +353,7 @@ class RippleFilter(rt_logging.LoggingClass):
                         pass
                     new_ripple_threshold = rip_thresh_file_line
 
-                if len(new_ripple_threshold) == 29:
+                if len(new_ripple_threshold) == 33:
                     # first three characters are ripple_thresh
                     self.conditioning_ripple_threshold = np.int(new_ripple_threshold[0:3])/10
                     # next three after space are normal thresh (content)

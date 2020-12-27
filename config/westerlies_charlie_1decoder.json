@@ -21,7 +21,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "charlie_6_23_run2_2decoder_v30",
+        "prefix": "charlie_6_23_run2_enc_cred_2",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -52,7 +52,8 @@
         "condition_rip_thresh": 100,
         "shortcut_msg_lockout": 30000,
         "center_well_position": [469,604],
-        "center_well_dist": 200
+        "center_well_dist": 200,
+        "enc_cred_int_max": 5
     },
 
     "ripple": {
