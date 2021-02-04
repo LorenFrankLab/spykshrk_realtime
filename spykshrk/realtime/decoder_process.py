@@ -516,7 +516,8 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         #print('current position',self.cur_pos)
         #print('pos index added to occupancy',self.cur_pos_ind)
 
-        if abs(self.cur_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
+        if (abs(self.cur_vel) >= self.config['encoder']['vel'] and self.taskState == 1
+            and not self.config['ripple_conditioning']['load_encoding']):
             # MEC test: add all positions to occupancy to compare to offline
             # if abs(self.cur_vel) >= 0:
             self.occ[self.cur_pos_ind] += 1
@@ -532,11 +533,14 @@ class PointProcessDecoder(rt_logging.LoggingClass):
                 #print('total decoded spikes', self.total_decoded_spike_count)
         
         # if re-loading previous run, get occ from config
-        elif self.taskState == 0:
-            self.occ = np.asarray(self.config['encoder']['occupancy'])[0]
-            self.occ = self.occ.astype('float64')
-            self.apply_no_anim_boundary(self.pos_bins_1, self.arm_coords, self.occ, np.nan)
-            #print(self.occ)
+        #elif self.taskState == 0:
+        elif self.config['ripple_conditioning']['load_encoding'] and self.pos_counter==0:    
+            #self.occ = np.asarray(self.config['encoder']['occupancy'])[0]
+            #self.occ = self.occ.astype('float64')
+            #self.apply_no_anim_boundary(self.pos_bins_1, self.arm_coords, self.occ, np.nan)
+            self.occ = np.load('/tmp/occupancy1.npy')
+            print('loaded decoder occupancy from tet 1')
+            self.pos_counter += 1
 
         return self.occ
 
@@ -791,6 +795,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.ripple_number = 0
         self.shortcut_message_sent = False
         self.dropped_spikes = 0
+        self.spike_timestamp = 0
         self.previous_spike_timestamp = 0
         self.lfp_timekeeper_counter = 1
         self.lfp_msg_counter = 0
@@ -915,9 +920,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             #self.config['trodes_network']['ripple_tetrodes'][0]
             #print('posterior loop',self.lfp_timekeeper_counter,lfp_timekeeper.timestamp,(lfp_timekeeper.timestamp-2*6*30))
 
-            if self.lfp_timekeeper_counter % 10 == 0:
-                self.record_timing(timestamp=lfp_timekeeper.timestamp-2*self.time_bin_size, elec_grp_id=1,
-                                   datatype=datatypes.Datatypes.SPIKES, label='post_start')
+            # turn this one off for now
+            #if self.lfp_timekeeper_counter % 10 == 0:
+            #    self.record_timing(timestamp=self.spike_timestamp, elec_grp_id=1,
+            #                       datatype=datatypes.Datatypes.SPIKES, label='post_start')
 
             # find rows in array that are -12 to -6 msec behind current timestamp
             posterior_spikes = self.decoded_spike_array[(self.decoded_spike_array[:,0]>
@@ -958,6 +964,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.spike_count = posterior_spikes.shape[0]
                     self.enc_cred_int_array = [0,0,0,0,0]
                     self.spikes_in_bin = 0
+                    self.spike_timestamp = np.int(posterior_spikes[0,0])
 
                     for i in range(0, posterior_spikes.shape[0]):
                         self.spikes_in_bin += 1
@@ -978,7 +985,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     
                     # record timing
                     if self.lfp_timekeeper_counter % 10 == 0:
-                        self.record_timing(timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, elec_grp_id=1,
+                        # bin timestamp: timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size
+                        self.record_timing(self.spike_timestamp, elec_grp_id=1,
                                        datatype=datatypes.Datatypes.SPIKES, label='post_end')                
 
                     # calculate arm sum, max, and cred interval
@@ -1005,7 +1013,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     # send posterior message to main process
                     # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                     self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
-                                                         lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
+                                                         self.spike_timestamp, 
                                                          self.posterior_sum_target, self.posterior_sum_offtarget, 
                                                          self.posterior_arm_sum[0][0],
                                                          self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
@@ -1068,8 +1076,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     # send posterior message to main process
                     # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                     self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
-                                                         lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                         self.posterior_sum_target, self.posterior_sum_offtarget, 
+                                                         0, self.posterior_sum_target, self.posterior_sum_offtarget, 
                                                          self.posterior_arm_sum[0][0],
                                                          self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                          self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
@@ -1127,8 +1134,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # send posterior message to main process
                 # timestamp is the beginning of the bin: lfp_timekeeper.timestamp-2*5*30
                 self.mpi_send.send_posterior_message(lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size,
-                                                     lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size, 
-                                                     self.posterior_sum_target, self.posterior_sum_offtarget, 
+                                                     0, self.posterior_sum_target, self.posterior_sum_offtarget, 
                                                      self.posterior_arm_sum[0][0],
                                                      self.posterior_arm_sum[0][1], self.posterior_arm_sum[0][2],
                                                      self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
@@ -1215,7 +1221,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_msg_counter % 150 == 0:
                     print('position =', current_pos, ' and velocity =', np.around(self.current_vel, decimals=2),
                           'segment =', pos_data.segment,
-                          'smooth_x', np.around(self.smooth_x, decimals=2), 'smooth_y', np.around(self.smooth_y, decimals=2))
+                          'raw_x', pos_data.x, 'raw_y', pos_data.y)
 
 
                 # read taskstate.txt for taskState - needs to be updated manually at begin of session

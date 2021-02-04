@@ -21,7 +21,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "percy_12_26_test",
+        "prefix": "percy_reload_test",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -54,7 +54,9 @@
         "center_well_position": [641,646],
         "center_well_dist": 500,
         "enc_cred_int_max": 5,
-        "min_unique_tets": 1
+        "min_unique_tets": 1,
+        "ripple_lockout": 3000,
+        "load_encoding": false
     },
 
     "ripple": {
@@ -135,7 +137,7 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 6,
+        "vel": 0,
         "spk_amp": 100,
         "noise_max_amp": 1500,
         "dead_channels": {

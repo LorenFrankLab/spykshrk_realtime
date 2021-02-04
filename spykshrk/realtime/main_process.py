@@ -339,6 +339,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.posterior_spike_count = 0
         self.posterior_arm_threshold = self.config['ripple_conditioning']['posterior_sum_threshold']
         self.ripple_detect_velocity = self.config['ripple_conditioning']['ripple_detect_velocity']
+        self._ripple_lockout_count = 0
+        self._in_ripple_lockout = False
+        self._ripple_last_lockout_timestamp = 0
+        self._ripple_lockout_time = self.config['ripple_conditioning']['ripple_lockout']
+
         # set max repeats allowed at each arm during content trials
         self.max_arm_repeats = 1
         # marker for stim_message to note end of ripple (message sent or end of lockout)
@@ -509,6 +514,31 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             for state in self._ripple_thresh_states.values():
                 num_above += state
             self.ripple_num_tet_above = num_above
+
+            # end ripple lockout
+            if self._in_ripple_lockout and (self.bin_timestamp_1 > self._ripple_last_lockout_timestamp + 
+                                            self._ripple_lockout_time):
+                self._in_ripple_lockout = False
+                self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
+                                  self.bin_timestamp_1, time, self._ripple_lockout_count, 
+                                  self._in_ripple_lockout, num_above, 0, self.spike_count)
+                #print('ripple end. ripple num:',self._ripple_lockout_count,'timestamp',self.bin_timestamp_1)
+                self._ripple_lockout_count += 1
+
+            # detect ripples 
+            if ((num_above >= self._ripple_n_above_thresh) and not self._in_ripple_lockout):
+                if self.velocity < 10:
+                    print('detection of ripple. timestamp',self.bin_timestamp_1, 
+                    'ripple num:',self._ripple_lockout_count)
+
+                # this starts the lockout for the content ripple threshold and tells us there is a ripple
+                self._in_ripple_lockout = True
+                self._ripple_last_lockout_timestamp = self.bin_timestamp_1
+                #print('last lockout timestamp',self._last_lockout_timestamp)
+
+                self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,self.bin_timestamp_1, 
+                    self.velocity, self._ripple_lockout_count, self._in_ripple_lockout,
+                                  num_above, 0, self.spike_count)
 
         #     # count number of tets above threshold for large ripple
         #     self._conditioning_ripple_thresh_states[elec_grp_id] = conditioning_thresh_state
@@ -701,13 +731,14 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         #remove posterior_time_bin from printing b/c we arent using it now
 
-        if self.taskState == 2:
+        if self.taskState == 2 and self.linearized_position<8:
             print('reward count. arm1:',self.arm1_replay_counter,'arm2:',self.arm2_replay_counter)
             print('max posterior in arm:', arm)
             print('position:', np.around(self.linearized_position, decimals=2),
-                  'bin timestamp:', self.bin_timestamp,'lfp timestamp:', self.lfp_timestamp, 
-                  'delay 1:', np.around((self.lfp_timestamp - self.bin_timestamp_1) / 30, decimals=1),
-                  'delay 2:', np.around((self.lfp_timestamp - self.bin_timestamp_2) / 30, decimals=1),
+                  'bin timestamp:', self.bin_timestamp, '1st spike timestamp:', self.spike_timestamp,
+                  'lfp timestamp:', self.lfp_timestamp, 
+                  'delay bin:', np.around((self.lfp_timestamp - self.bin_timestamp_1) / 30, decimals=1),
+                  'delay spike:', np.around((self.lfp_timestamp - self.spike_timestamp) / 30, decimals=1),
                   'spike count 1:', self.spike_count_1, 'spike count 2:', self.spike_count_2, 
                   'sliding window:', self.post_sum_sliding_window,
                   'well dist',np.around(self.center_well_dist_cm,decimals=2))
@@ -752,8 +783,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 (self.bin_timestamp_1 > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
                 and not self.rip_cond_only and self.shortcut_msg_on and not self.instructive and 
                 self.center_well_proximity and 
-                np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0]>=self.min_unique_tets
-                and self.linearized_position > 1):
+                np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0]>=self.min_unique_tets):
                 # NOTE: we can now replace this with the actual shortcut message!
                 networkclient.sendStateScriptShortcutMessage(14)
                 print('replay conditoning: statescript trigger 14')
@@ -951,7 +981,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             if len(new_posterior_threshold) == 33:
                 self.posterior_arm_threshold = np.int(new_posterior_threshold[8:11]) / 100
                 #self.ripple_detect_velocity = np.int(new_posterior_threshold[14:17]) / 10
-                self.second_post_sum_thresh = np.int(new_posterior_threshold[14:17]) / 100
+                #self.second_post_sum_thresh = np.int(new_posterior_threshold[14:17]) / 100
                 self.rip_cond_only = np.int(new_posterior_threshold[18:19])
                 self.shortcut_msg_on = np.int(new_posterior_threshold[20:21])
                 self._ripple_n_above_thresh = np.int(new_posterior_threshold[22:23])
@@ -973,6 +1003,15 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 taskstate = taskstate_file_line
             self.taskState = np.int(taskstate[0:1])
             print('main taskState:',self.taskState)
+
+        # to test shortcut message delay
+        #if self.decoder_1_count % 800 == 0 and self.taskState == 2:
+        #    print('TESTING! bin timestamp:', self.bin_timestamp, '1st spike timestamp:', self.spike_timestamp,
+        #          'lfp timestamp:', self.lfp_timestamp, 
+        #          'delay bin:', np.around((self.lfp_timestamp - self.bin_timestamp_1) / 30, decimals=1),
+        #          'delay spike:', np.around((self.lfp_timestamp - self.spike_timestamp) / 30, decimals=1))            
+        #    networkclient.sendStateScriptShortcutMessage(14)
+        #    print('TESTING: statescript trigger 14')            
 
             # #instructive trials - use reward_arm to set replay target arm
             # with open('config/target_arm.txt') as target_arm_file:

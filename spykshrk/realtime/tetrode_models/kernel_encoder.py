@@ -97,11 +97,15 @@ class RSTKernelEncoder:
         self.occupancy_counter = 1
         self.display_occupancy = True
         self.taskState = 1
+        self.task3_counter = 0
+        self.load_encoding = self.config['ripple_conditioning']['load_encoding']
+        self.spike_counter = 0
 
         # define arm_coords for occupancy
         self.number_arms = self.config['pp_decoder']['number_arms']
         #if self.number_arms == 8:
-        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],[93,104],[109,120],[125,136]])
+        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],
+        #                                    [93,104],[109,120],[125,136]])
         
         # for 2-arm tree track
         #elif self.number_arms == 2:
@@ -162,7 +166,8 @@ class RSTKernelEncoder:
         # bin_idx = np.nonzero((self.param.pos_hist_struct.pos_bin_edges - covariate) > 0)[0][0] - 1
         bin_idx = self.param.pos_hist_struct.which_bin(self.covariate)
         #only want to add to pos_hist during movement times - aka vel > 8
-        if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
+        if (abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1
+            and not self.load_encoding):
             self.pos_hist[bin_idx] += 1
             #print('occupancy before',self.pos_hist)
             #print('update_covariate current_vel: ',self.current_vel)
@@ -172,11 +177,12 @@ class RSTKernelEncoder:
 
             self.occupancy_counter += 1
         # if taskstate 0, load pos_hist from config file
-        elif self.taskState == 0:
-            self.pos_hist = np.asarray(self.config['encoder']['occupancy'])[0]
-            self.pos_hist = self.pos_hist.astype('float64')
-            self.apply_no_anim_boundary(self.pos_bins, self.arm_coords, self.pos_hist, np.nan)
-            #print(self.pos_hist)
+        #elif self.load_encoding and self.occupancy_counter == 0:
+        #    self.pos_hist = np.asarray(self.config['encoder']['occupancy'])[0]
+        #    self.pos_hist = self.pos_hist.astype('float64')
+        #    self.apply_no_anim_boundary(self.pos_bins, self.arm_coords, self.pos_hist, np.nan)
+        #    #print(self.pos_hist)
+        #    self.occupancy_counter += 1
 
         if self.occupancy_counter % 10000 == 0:
             #print('encoder_query_occupancy: ',self.pos_hist)
@@ -229,6 +235,26 @@ class RSTKernelEncoder:
         # rstar tree version
         #query_weights, query_positions = self.query_mark(mark)
 
+        # load marks and position if needed
+        if self.load_encoding and self.spike_counter == 0:
+            self.marks = np.load(f'/tmp/marks{elec_grp_id}.npy')
+            self.positions = np.load(f'/tmp/position{elec_grp_id}.npy')
+            self.pos_hist = np.load(f'/tmp/occupancy{elec_grp_id}.npy')
+            self.mark_idx = np.load(f'/tmp/marks_idx{elec_grp_id}.npy')[0]
+            print('loaded marks and position for tet',elec_grp_id)
+            #print(self.pos_hist)
+            #print(self.mark_idx)
+            self.spike_counter += 1
+
+        # if start of taskstate3 save marks and position
+        if self.taskState == 3 and self.task3_counter == 0 and not self.load_encoding:
+            np.save(f'/tmp/marks{elec_grp_id}.npy',self.marks)
+            np.save(f'/tmp/position{elec_grp_id}.npy',self.positions)
+            np.save(f'/tmp/occupancy{elec_grp_id}.npy',self.pos_hist)
+            np.save(f'/tmp/marks_idx{elec_grp_id}.npy',np.array((self.mark_idx,0)))
+            #print('marks size',self.mark_idx,self.marks.shape[0])
+            print('saved marks and position for tet',elec_grp_id)
+            self.task3_counter += 1
         ############################################################################
         # evaluate Gaussian kernel on distance in mark space
         squared_distance = np.sum(

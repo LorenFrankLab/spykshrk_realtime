@@ -401,8 +401,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     # added switch from config file: taskState == 1 (only add spikes if in first cued trials)
                     # can also add a secondary spike amplitude filter here
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
-                    if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
-                        if self.spk_counter % 100 == 0 and self.rank == self.config['rank']['encoders'][0]:
+                    if (abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1
+                        and not self.config['ripple_conditioning']['load_encoding']):
+                        if self.spk_counter % 1000 == 0:
                             print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
                             #print('number of noise events detected:',self.count_noise_events)
 
