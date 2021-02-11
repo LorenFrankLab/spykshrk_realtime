@@ -337,64 +337,70 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                         query_mark_hist(amp_marks,datapoint.timestamp,
                                         datapoint.elec_grp_id)                # type: kernel_encoder.RSTKernelEncoderQuery
                     #print('decoded spike',query_result.query_hist)
+                    if query_result is not None:
 
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='kde_end')
+                        self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                                    datatype=datatypes.Datatypes.SPIKES, label='kde_end')
 
-                    # for weight, position in zip(query_result.query_weights, query_result.query_positions):
-                    #     self.write_record(realtime_base.RecordIDs.ENCODER_QUERY,
-                    #                       query_result.query_time,
-                    #                       query_result.ntrode_id,
-                    #                       weight, position)
+                        # for weight, position in zip(query_result.query_weights, query_result.query_positions):
+                        #     self.write_record(realtime_base.RecordIDs.ENCODER_QUERY,
+                        #                       query_result.query_time,
+                        #                       query_result.ntrode_id,
+                        #                       weight, position)
 
-                    # record which decoder is receiving spike
-                    if datapoint.elec_grp_id in self.config['tetrode_split']['1st_half']:
-                        self.decoder_number = self.config['rank']['decoder'][0]
-                    elif datapoint.elec_grp_id in self.config['tetrode_split']['2nd_half']:
-                        self.decoder_number = self.config['rank']['decoder'][1]
+                        # record which decoder is receiving spike
+                        if datapoint.elec_grp_id in self.config['tetrode_split']['1st_half']:
+                            self.decoder_number = self.config['rank']['decoder'][0]
+                        elif datapoint.elec_grp_id in self.config['tetrode_split']['2nd_half']:
+                            self.decoder_number = self.config['rank']['decoder'][1]
 
-                    # record if this is an encoding spike
-                    if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
-                        self.encoding_spike = 1
+                        # record if this is an encoding spike
+                        if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
+                            self.encoding_spike = 1
+                        else:
+                            self.encoding_spike = 0
+
+                        # add credible interval here and add to message
+                        # for this we will use 50% not 95%
+                        self.spxx = np.sort(query_result.query_hist)[::-1]
+                        self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.5, prepend=False))[0] + 1)[0]
+                        # okay - this seems to be accurate
+                        #if datapoint.elec_grp_id == 2:
+                        #    print(self.crit_ind)
+                        #    print(query_result.query_hist)
+
+                        # save query_weights instead of query_hist: this will save number of spikes in rectangle
+                        self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
+                                        query_result.query_time,
+                                        query_result.elec_grp_id,
+                                        amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
+                                        self.current_pos,self.current_vel,self.encoding_spike,
+                                        self.crit_ind,self.decoder_number,
+                                        *query_result.query_hist)
+
+                        # weights have constantly changing size and are very small numbers - how to get # marks??
+                        #print('weights',query_result.query_weights)
+
+                        #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                        #                   datatype=datatypes.Datatypes.SPIKES, label='spk_dec')
+
+                        self.mpi_send.send_decoded_spike(SpikeDecodeResultsMessage(timestamp=query_result.query_time,
+                                                                                elec_grp_id=query_result.elec_grp_id,
+                                                                                current_pos=self.current_pos,
+                                                                                cred_int=self.crit_ind,
+                                                                                pos_hist=query_result.query_hist))
+                        #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
+
+                        # update spike_sent variable to True each time a spike is actually sent to decoder
+                        self.spike_sent = True
+                        self.thread.fetch_spike_sent(self.spike_sent)
+                        self.thread.get_spike_info(datapoint.timestamp,datapoint.elec_grp_id,self.current_pos,self.config)
+                        #print('spike_sent value from manager:',self.spike_sent)
+
                     else:
-                        self.encoding_spike = 0
-
-                    # add credible interval here and add to message
-                    # for this we will use 50% not 95%
-                    self.spxx = np.sort(query_result.query_hist)[::-1]
-                    self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.5, prepend=False))[0] + 1)[0]
-                    # okay - this seems to be accurate
-                    #if datapoint.elec_grp_id == 2:
-                    #    print(self.crit_ind)
-                    #    print(query_result.query_hist)
-
-                    # save query_weights instead of query_hist: this will save number of spikes in rectangle
-                    self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
-                                      query_result.query_time,
-                                      query_result.elec_grp_id,
-                                      amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
-                                      self.current_pos,self.current_vel,self.encoding_spike,
-                                      self.crit_ind,self.decoder_number,
-                                      *query_result.query_hist)
-
-                    # weights have constantly changing size and are very small numbers - how to get # marks??
-                    #print('weights',query_result.query_weights)
-
-                    #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                    #                   datatype=datatypes.Datatypes.SPIKES, label='spk_dec')
-
-                    self.mpi_send.send_decoded_spike(SpikeDecodeResultsMessage(timestamp=query_result.query_time,
-                                                                               elec_grp_id=query_result.elec_grp_id,
-                                                                               current_pos=self.current_pos,
-                                                                               cred_int=self.crit_ind,
-                                                                               pos_hist=query_result.query_hist))
-                    #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
-
-                    # update spike_sent variable to True each time a spike is actually sent to decoder
-                    self.spike_sent = True
-                    self.thread.fetch_spike_sent(self.spike_sent)
-                    self.thread.get_spike_info(datapoint.timestamp,datapoint.elec_grp_id,self.current_pos,self.config)
-                    #print('spike_sent value from manager:',self.spike_sent)
+                        # in the future, do we want to write a record if received spike but didn't decode?
+                        # (occurs when there aren't enough spikes within the n-cube surrounding the received spike)
+                        pass
 
                     # this adds the current spike to the R Star Tree
                     # to turn off adding spike, comment out "new_mark" below

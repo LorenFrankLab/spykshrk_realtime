@@ -255,56 +255,76 @@ class RSTKernelEncoder:
             #print('marks size',self.mark_idx,self.marks.shape[0])
             print('saved marks and position for tet',elec_grp_id)
             self.task3_counter += 1
-        ############################################################################
-        # evaluate Gaussian kernel on distance in mark space
-        squared_distance = np.sum(
-            np.square(self.marks[:self.mark_idx - 1] - mark),
-            axis=1)
-        query_weights = self.k1 * np.exp(squared_distance * self.k2)
-        query_positions = self.positions[:self.mark_idx - 1]
-        ############################################################################
 
-        query_hist, query_hist_edges = np.histogram(
-            a=query_positions, bins=self.param.pos_hist_struct.pos_bin_edges,
-            weights=query_weights, normed=False)
-        # print observations before offset
-        #print('weights',query_weights)
-        #print('position',query_positions)
-        #print('observations',query_hist)
+        compute_histogram = True
+        # apply filter if requested
+        if self.config['encoder']['mark_kernel']['enable_filter'] == 1:
+            std = self.config['encoder']['mark_kernel']['std']
+            n_std = self.config['encoder']['mark_kernel']['n_std']
+            in_range = np.ones(self.mark_idx, dtype=bool)
+            for ii in range(self.marks.shape[1]):
+                in_range = np.logical_and(
+                    np.logical_and(
+                        self.marks[:self.mark_idx, ii] > mark[ii] - n_std * std,
+                        self.marks[:self.mark_idx, ii] < mark[ii] + n_std * std),
+                    in_range)
+            if np.sum(in_range) < self.config['encoder']['mark_kernel']['n_marks_min']:
+                compute_histogram = False
 
-        # Offset from zero - this could be a problem for the gaps between arms
-        # gaps will have high firing rate because of this offset
-        # we may want to remove this, and/or we will put NaNs in the gaps for self.pos_hist
-        query_hist += 0.0000001
+        if compute_histogram:
 
-        # occupancy normalize
-        if self.taskState == 2 and self.display_occupancy:
-            print(self.pos_hist)
-            print((self.pos_hist/np.nansum(self.pos_hist)))
-            self.display_occupancy = False
+            ############################################################################
+            # evaluate Gaussian kernel on distance in mark space
+            squared_distance = np.sum(
+                np.square(self.marks[:self.mark_idx] - mark),
+                axis=1)
+            query_weights = self.k1 * np.exp(squared_distance * self.k2)
+            query_positions = self.positions[:self.mark_idx]
+            ############################################################################
 
-        # MEC: added NaNs in the gaps between arms in self.pos_hist
-        # MEC: normalize self.pos_hist to match offline decoder 
-        query_hist = query_hist / (self.pos_hist/np.nansum(self.pos_hist))
-        query_hist[np.isnan(query_hist)]=0.0
-        #print(query_weights.shape)
-        #print('obs after normalize',query_hist)
+            query_hist, query_hist_edges = np.histogram(
+                a=query_positions, bins=self.param.pos_hist_struct.pos_bin_edges,
+                weights=query_weights, normed=False)
+            # print observations before offset
+            #print('weights',query_weights)
+            #print('position',query_positions)
+            #print('observations',query_hist)
 
-        # MEC - turned off convolution because we are using 5cm position bins
-        #query_hist = np.convolve(query_hist, self.pos_kernel, mode='same')
-        #print(query_hist)
+            # Offset from zero - this could be a problem for the gaps between arms
+            # gaps will have high firing rate because of this offset
+            # we may want to remove this, and/or we will put NaNs in the gaps for self.pos_hist
+            query_hist += 0.0000001
 
-        # normalized PDF
-        # MEC: replace sum with nansum - this seems okay now
-        # note: pos_bin_delta is currently 1
-        #print('query hist sum',np.nansum(query_hist))
-        query_hist = query_hist / (np.sum(query_hist) * self.param.pos_hist_struct.pos_bin_delta)
-        #print('observation:',query_hist)
-        #print('observ sum',np.nansum(query_hist))
+            # occupancy normalize
+            if self.taskState == 2 and self.display_occupancy:
+                print(self.pos_hist)
+                print((self.pos_hist/np.nansum(self.pos_hist)))
+                self.display_occupancy = False
 
-        return RSTKernelEncoderQuery(query_time=time,
-                                     elec_grp_id=elec_grp_id,
-                                     query_weights=query_weights,
-                                     query_positions=query_positions,
-                                     query_hist=query_hist)
+            # MEC: added NaNs in the gaps between arms in self.pos_hist
+            # MEC: normalize self.pos_hist to match offline decoder 
+            query_hist = query_hist / (self.pos_hist/np.nansum(self.pos_hist))
+            query_hist[np.isnan(query_hist)]=0.0
+            #print(query_weights.shape)
+            #print('obs after normalize',query_hist)
+
+            # MEC - turned off convolution because we are using 5cm position bins
+            #query_hist = np.convolve(query_hist, self.pos_kernel, mode='same')
+            #print(query_hist)
+
+            # normalized PDF
+            # MEC: replace sum with nansum - this seems okay now
+            # note: pos_bin_delta is currently 1
+            #print('query hist sum',np.nansum(query_hist))
+            query_hist = query_hist / (np.sum(query_hist) * self.param.pos_hist_struct.pos_bin_delta)
+            #print('observation:',query_hist)
+            #print('observ sum',np.nansum(query_hist))
+
+            return RSTKernelEncoderQuery(query_time=time,
+                                        elec_grp_id=elec_grp_id,
+                                        query_weights=query_weights,
+                                        query_positions=query_positions,
+                                        query_hist=query_hist)
+        else:
+            return None
 
