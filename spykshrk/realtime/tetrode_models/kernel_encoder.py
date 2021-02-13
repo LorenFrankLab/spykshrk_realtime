@@ -103,17 +103,6 @@ class RSTKernelEncoder:
 
         # define arm_coords for occupancy
         self.number_arms = self.config['pp_decoder']['number_arms']
-        #if self.number_arms == 8:
-        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72],[77,88],
-        #                                    [93,104],[109,120],[125,136]])
-        
-        # for 2-arm tree track
-        #elif self.number_arms == 2:
-        #    self.arm_coords = np.array([[0,12],[17,41],[46,70]])
-        
-        # for 4-arm sun god
-        #elif self.number_arms == 4:
-        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
         
         # define arm coords directly from config
         self.arm_coords = np.array(self.config['encoder']['arm_coords'])
@@ -176,13 +165,6 @@ class RSTKernelEncoder:
             #print('occupancy',self.pos_hist)
 
             self.occupancy_counter += 1
-        # if taskstate 0, load pos_hist from config file
-        #elif self.load_encoding and self.occupancy_counter == 0:
-        #    self.pos_hist = np.asarray(self.config['encoder']['occupancy'])[0]
-        #    self.pos_hist = self.pos_hist.astype('float64')
-        #    self.apply_no_anim_boundary(self.pos_bins, self.arm_coords, self.pos_hist, np.nan)
-        #    #print(self.pos_hist)
-        #    self.occupancy_counter += 1
 
         if self.occupancy_counter % 10000 == 0:
             #print('encoder_query_occupancy: ',self.pos_hist)

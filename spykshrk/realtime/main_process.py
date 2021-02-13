@@ -417,16 +417,6 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         # make arm_coords conditional on number of arms
         self.number_arms = self.config['pp_decoder']['number_arms']
-        #if self.number_arms == 8:
-        #    self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
-        #                           77, 88], [93, 104], [109, 120], [125, 136]])
-        #elif self.number_arms == 4:
-        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
-        #elif self.number_arms == 2:
-        #    #sun god
-        #    #self.arm_coords = np.array([[0,8],[13,24],[29,40]])
-        #    #tree track
-        #    self.arm_coords = np.array([[0,12],[17,41],[46,70]])
         # take arm coords directely from config
         self.arm_coords = np.array(self.config['encoder']['arm_coords'])
 
@@ -483,25 +473,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         #print('received thresh states: ',threshold_state,conditioning_thresh_state)
 
-        # NOTE: 10-17-20 not currently using ripple times for feedback
-        # how can we turn this on if needed??
-        #num_above = 0
-        
-        # crashes here during sleep - try removing require for session type
-        #if self._enabled and self.config['ripple_conditioning']['session_type'] == 'run':
+        # this is for ripple detection
         if self._enabled:
             self.thresh_counter += 1
 
-        #     # if self.thresh_counter % 1500 == 0 and self._in_lockout:
-        #     #    #print('in normal lockout for ripple detection - one line per tetrode')
-        #     #    pass
-
-        #     # if self.thresh_counter % 1500 == 0 and self._conditioning_in_lockout:
-        #     #    #print('in conditoning lockout for ripple detection - one line per tetrode')
-        #     #    pass
-
             self._ripple_thresh_states.setdefault(elec_grp_id, 0)
-        #     self._conditioning_ripple_thresh_states.setdefault(elec_grp_id, 0)
 
         #     # only write state if state changed
         #     if self._ripple_thresh_states[elec_grp_id] != threshold_state:
@@ -539,187 +515,6 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,self.bin_timestamp_1, 
                     self.velocity, self._ripple_lockout_count, self._in_ripple_lockout,
                                   num_above, 0, self.spike_count)
-
-        #     # count number of tets above threshold for large ripple
-        #     self._conditioning_ripple_thresh_states[elec_grp_id] = conditioning_thresh_state
-        #     conditioning_num_above = 0
-        #     for conditioning_state in self._conditioning_ripple_thresh_states.values():
-        #         conditioning_num_above += conditioning_state
-
-        #     # end lockout for content ripples
-        #     # new using spike count avg - 3 of 5 below, so it is after posterior sum ends
-        #     # loren said this should match posterior sum, so only require 2 of 5
-        #     # should happen after posterior sum for every new data point
-        #     # also using a timer - 50 msec
-        #     # replace threshold with spike count st dev, before: avg*0.75
-        #     if (self._in_lockout and timestamp > self._last_lockout_timestamp + self._lockout_time
-        #         and np.count_nonzero(self.spk_count_avg < self.spike_count_base_avg-(0.5*self.spike_count_base_std)) > 1):
-            
-        #     #original
-        #     #if self._in_lockout and (timestamp > self._last_lockout_timestamp + self._lockout_time):
-        #         # End lockout
-        #         self._in_lockout = False
-        #         self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #                           timestamp, time, self._lockout_count, self._in_lockout,
-        #                           num_above, self.big_rip_message_sent, self.spike_count)
-        #         print('ripple end. ripple num:',self._lockout_count,'timestamp',timestamp)
-        #         self._lockout_count += 1
-        #         #print('ripple lockout ended. time:',np.around(timestamp/30,decimals=2))
-
-        #     ## end lockout for posterior sum
-        #     #if self._posterior_in_lockout and (timestamp > self._posterior_last_lockout_timestamp +
-        #     #                                   self._posterior_lockout_time):
-        #     #    # End lockout
-        #     #    self._posterior_in_lockout = False
-        #     #    self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #     #                      timestamp, time, self._lockout_count, self._posterior_in_lockout,
-        #     #                      num_above, self.big_rip_message_sent)
-        #         #self._lockout_count += 1
-        #         #print('posterior sum lockout ended. time:',np.around(timestamp/30,decimals=2))
-
-        #     # end lockout for large ripples
-        #     # note: currently only one variable for counting both lockouts
-        #     if self._conditioning_in_lockout and (timestamp > self._conditioning_last_lockout_timestamp +
-        #                                           self._conditioning_lockout_time):
-        #         # End lockout
-        #         self._conditioning_in_lockout = False
-        #         self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #                           timestamp, time, self._lockout_count, self._conditioning_in_lockout,
-        #                           num_above, self.big_rip_message_sent, self.spike_count)
-        #         self._lockout_count += 1
-        #         print('end of lockout big ripple')
-
-        #     # end lockout for running posterior sum at end of ripple
-        #     # lockout hard coded for 10 msec (300 timestamps)
-        #     if self._ripple_end_in_lockout and (timestamp > self._ripple_end_last_lockout_timestamp +
-        #                                         self._ripple_end_lockout_time):
-        #         # End lockout
-        #         self._ripple_end_in_lockout = False
-        #         # self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #         #                  timestamp, time, self._lockout_count, self._in_lockout,
-        #         #                  num_above, self.big_rip_message_sent)
-        #         #self._lockout_count += 1
-        #         print('end ripple lockout ended. time:',
-        #               np.around(timestamp / 30, decimals=2))
-
-        #     # detection of large ripples: 2 tets above rip thresh, velocity below vel thresh, not in lockout (125 msec after previous rip)
-        #     # ideally this would also take in some output from statescript that says whether this time is ripple or content conditioning
-        #     # because this statement is before posterior sum, posterior sum will not run if the two ripple thresholds are the same
-        #     if ((conditioning_num_above >= self._ripple_n_above_thresh) and 
-        #         self.velocity < self.ripple_detect_velocity and 
-        #         not self._conditioning_in_lockout):
-        #         self.big_rip_message_sent = 0
-        #         print('tets above cond ripple thresh: ', conditioning_num_above, timestamp,
-        #               self._conditioning_ripple_thresh_states, np.around(self.velocity, decimals=2))
-        #         #print('lockout time: ',self._lockout_time)
-        #         # this will flash light every time a ripple is detected
-        #         #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['trigger(16);\n'])
-
-        #         # this is the easiest place to send a statescript message for ripple conditioning
-        #         # this will send a message for 1st threshold crossing - no time delay
-        #         # need to re-introduce lockout so that only one message is sent per ripple (7500 = 5 sec)
-        #         # lockout is in timestamps - so 1 seconds = 30000
-        #         # for a dynamic filter, we need to get ripple size from the threshold message and send to statescript
-        #         #print('sent behavior message based on ripple thresh',time,timestamp)
-        #         #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['trigger(7);\n'])
-
-        #         # for trodes okay to send variable and function in one command, cant send two functions in one
-        #         # command and cant send two function in two back-to-back commands - gives compile error
-        #         #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['replay_arm = 1;\ntrigger(15);\n'])
-
-        #         # for trodes, this is the syntax for a shortcut message - but does not work currently
-        #         # number is function number
-        #         # networkclient.sendStateScriptShortcutMessage(14)
-        #         #print('sent shortcut message')
-
-        #         # this starts the lockout for large ripple threshold
-        #         self._conditioning_in_lockout = True
-        #         self._conditioning_last_lockout_timestamp = timestamp
-        #         self.big_rip_message_sent = 1
-
-        #         # MEC this will get rid of lockout
-        #         #self._in_lockout = True
-        #         #self._last_lockout_timestamp = timestamp
-
-        #         #self.class_log.debug("Ripple threshold detected {}.".format(self._ripple_thresh_states))
-
-        #         self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #                           timestamp, self.velocity, self._lockout_count, self._conditioning_in_lockout,
-        #                           conditioning_num_above, self.big_rip_message_sent, self.spike_count)
-
-        #         # dan's way of sending stim to trodes - not using this.
-        #         # self._send_interface.start_stimulation()
-
-        #     # detection of content ripples: 2 tets above rip thresh, velocity below vel thresh, 
-        #     # includes time lockout and spike_count > 0
-        #     # for testing remove self.spike count > 0
-        #     elif ((num_above >= self._ripple_n_above_thresh) and 
-        #         self.velocity < self.ripple_detect_velocity and
-        #         self.spike_count > 0 and not self._in_lockout):
-        #         # add to the ripple count- no should use lockout_count
-        #         #self.ripple_number += 1
-        #         # this needs to just turn on light
-        #         # i think this needs to use lockout too, otherwise too many messages
-        #         # but this could interfere with detection of larger ripples
-        #         # i think we need no lockout here because it will mask large ripples
-        #         # so need to come up with a better way to trigger light - turn off for now
-        #         print('detection of ripple for content, lfp timestamp',
-        #               timestamp, np.around(timestamp / 30, decimals=2), 'ripple num:',self._lockout_count)
-        #         # to test shortcut message - it works!
-
-        #         if self.taskState == 2 and self.linearized_position < 10:
-        #             #networkclient.sendStateScriptShortcutMessage(14)
-        #             #print('sent shortcut message for any ripple')
-        #             print('arm1 replays:', self.arm1_replay_counter,
-        #                   'arm2 replays:', self.arm2_replay_counter,
-        #                   'arm3 replays:', self.arm3_replay_counter,
-        #                   'arm4 replays:', self.arm4_replay_counter,)
-        #         #print('sent light message based on ripple thresh',time,timestamp)
-        #         #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['trigger(15);\n'])
-
-        #         # this starts the lockout for the content ripple threshold and tells us there is a ripple
-        #         # start posterior lockout here too, it is shorter, so it should have 25 msec delay between ripples
-        #         self._in_lockout = True
-        #         #self._posterior_in_lockout = True
-        #         self._last_lockout_timestamp = timestamp
-        #         #print('last lockout timestamp',self._last_lockout_timestamp)
-        #         self._posterior_last_lockout_timestamp = timestamp
-        #         # this should allow us to tell difference between ripples that trigger conditioning
-        #         self.big_rip_message_sent = 0
-
-        #         self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #                           timestamp, self.velocity, self._lockout_count, self._in_lockout,
-        #                           num_above, self.big_rip_message_sent, self.spike_count)
-
-        #     # this is where sending the statescript message should be triggered if lockout is over
-        #     # this should force message to be sent on time, without a delay from empty decoder bins
-        #     # we may also need to incorperate a lower limit for spike_count
-        #     # set trigger for when lfp timestamp is close to end of posterior lockout time
-        #     # may need another lockout period of 10 msec here to prevent this line for triggering many times
-        #     # LFP_timestamp is updated every 20 timestamps
-        #     # start a 10 msec lockout period so that this function only runs once
-        #     # we might need to make this lockout much longer and loop it in to posterior_sum so that posterior sum
-        #     # doesnt send a second message once the empty bins finally arrive
-        #     # with abs < 60, this will trigger 2msec before the end of posterior_lockout
-        #     # so this will always happen before the next posterior message (i think)
-        #     # this might no send some messages because it happens before posterior lockout is over so it wont
-        #     # trigger sending message for ripples where time runs about before one arm passes threshold...
-        #     # NOTE: correct, this currnetly doesnt do anything!
-        #     # if not self._ripple_end_in_lockout and abs((self._posterior_last_lockout_timestamp+self._posterior_lockout_time) - timestamp) < 60:
-        #     #     # force sending of posterior sum statescript message
-        #     #     # run posterior_sum with current values
-        #     #     #print('each time you see this posterior sum will run. time diff:',
-        #     #     #      abs((self._posterior_last_lockout_timestamp+self._posterior_lockout_time) - timestamp))
-        #     #     print('at ripple end, forced posterior_sum to send message.')
-
-        #     #     self.posterior_sum(bin_timestamp=self.bin_timestamp,spike_timestamp=self.spike_timestamp,
-        #     #                   box=self.box_post,arm1=self.arm1_post,
-        #     #                   arm2=self.arm2_post,arm3=self.arm3_post,arm4=self.arm4_post,
-        #     #                   arm5=self.arm5_post,arm6=self.arm6_post,arm7=self.arm7_post,arm8=self.arm8_post,
-        #     #                   spike_count=self.spike_count,networkclient=networkclient)
-
-        #     #     self._ripple_end_in_lockout = True
-        #     #     self._ripple_end_last_lockout_timestamp = timestamp
 
         return num_above
 
@@ -772,10 +567,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             # only send message during taskState 2 and for arm 1
             # now includes on/off switch from new_rippple file - self.shortcut_msg_on
-            # TO DO: add 1.5 sec lockout here: to prevent immediate 2nd sound after a correct replay
-            ### use this code: (timestamp > self._conditioning_last_lockout_timestamp +
-            ###                                      self._conditioning_lockout_time)
-            
+            # includes shortcut message lockout
+
             # 12-23: added filter for unqiue good tets
             # this should be for conditioning - remove crit_ind filter
             # was lfp_timestamp, now bin_timestamp_1
@@ -805,48 +598,6 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 #self._trodes_message_lockout_timestamp = self.lfp_timestamp
                 # 2 decoders
                 self._trodes_message_lockout_timestamp = self.bin_timestamp_1
-
-            # different message for each arm: for the instructive task
-            # take out requirement to match speicific arm: self.shortcut_message_arm == self.replay_target_arm
-            # elif (self.taskState == 2 and self.shortcut_message_arm == 1 and
-            #     (self.lfp_timestamp > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
-            #     and self.linearized_position < self.position_limit 
-            #     and self.shortcut_message_arm == self.replay_target_arm
-            #     and not self.rip_cond_only and self.shortcut_msg_on and self.instructive):
-            #     networkclient.sendStateScriptShortcutMessage(21)
-            #     print('statescript trigger 21 - arm 1')
-            #     self.shortcut_message_sent = True
-            #     self._trodes_message_lockout_timestamp = self.lfp_timestamp
-
-            # elif (self.taskState == 2 and self.shortcut_message_arm == 2 and
-            #     (self.lfp_timestamp > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
-            #     and self.linearized_position < self.position_limit 
-            #     and self.shortcut_message_arm == self.replay_target_arm
-            #     and not self.rip_cond_only and self.shortcut_msg_on and self.instructive):
-            #     networkclient.sendStateScriptShortcutMessage(22)
-            #     print('statescript trigger 22 - arm 2')
-            #     self.shortcut_message_sent = True
-            #     self._trodes_message_lockout_timestamp = self.lfp_timestamp
-
-            # elif (self.taskState == 2 and self.shortcut_message_arm == 3 and
-            #     (self.lfp_timestamp > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
-            #     and self.linearized_position < self.position_limit 
-            #     and self.shortcut_message_arm == self.replay_target_arm
-            #     and not self.rip_cond_only and self.shortcut_msg_on and self.instructive):
-            #     networkclient.sendStateScriptShortcutMessage(23)
-            #     print('statescript trigger 23 - arm 3')
-            #     self.shortcut_message_sent = True
-            #     self._trodes_message_lockout_timestamp = self.lfp_timestamp
-
-            # elif (self.taskState == 2 and self.shortcut_message_arm == 4 and
-            #     (self.lfp_timestamp > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
-            #     and self.linearized_position < self.position_limit 
-            #     and self.shortcut_message_arm == self.replay_target_arm
-            #     and not self.rip_cond_only and self.shortcut_msg_on and self.instructive):
-            #     networkclient.sendStateScriptShortcutMessage(24)
-            #     print('statescript trigger 24 - arm 4')
-            #     self.shortcut_message_sent = True
-            #     self._trodes_message_lockout_timestamp = self.lfp_timestamp
 
             # # to make whitenoise for incorrect arm
             # elif (self.taskState == 2 and self.shortcut_message_arm == self.replay_non_target_arm
@@ -935,16 +686,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             self.decoder_2_count += 1
         #print('tet list in main',self.tet1,self.tet2,self.tet3,self.tet4,self.tet5)
 
-        # reset posterior arm threshold (e.g. 0.5) based on the new_ripple_threshold text file
-        # this should run every 10 sec, using thresh_counter which refers to each message from ripple node
-        # 5 nodes so 5*1500 = 7500 per second
-        # pos_vel counter seems to work better - this is still way faster, not sure how often it gets sent...
-        # ah okay, the problem is that this is within posterior sum which only happens sporatically
-        # so matching will happen less often - 5x , 10x - not sure???
-        # this will depend on the number of spikes, so that is not ideal
-        # should probably use a lockout instead...
-        # try vel_pos_counter again (before self.thresh_counter % 10000)
-
+        # would like to reset taskstate to 1 automatically - but this didnt work
         #if self.thresh_counter < 15000:
         #    #with open("config/taskstate.txt","a") as reward_arm_file:
         #    #    fd = reward_arm_file.fileno()
@@ -1013,34 +755,6 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #    networkclient.sendStateScriptShortcutMessage(14)
         #    print('TESTING: statescript trigger 14')            
 
-            # #instructive trials - use reward_arm to set replay target arm
-            # with open('config/target_arm.txt') as target_arm_file:
-            #     fd = target_arm_file.fileno()
-            #     fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-            #     # read file
-            #     for target_arm_file_line in target_arm_file:
-            #         pass
-            #     target_arm = target_arm_file_line
-            # trodes_target_arm = np.int(target_arm[0:2])
-            # #if self.instructive:
-            # if trodes_target_arm == 15:
-            #     self.replay_target_arm = 1
-            # elif trodes_target_arm == 14:
-            #     self.replay_target_arm = 2
-            # elif trodes_target_arm == 13:
-            #     self.replay_target_arm = 3
-            # elif trodes_target_arm == 12:
-            #     self.replay_target_arm = 4                
-            # print('instructive target arm:',self.replay_target_arm)
-
-
-            # this sort of works - not sure if it happens at very beginning though
-            # turn off for now - currently it just runs all the time
-            #with open("config/taskstate.txt","a") as reward_arm_file:
-            #    fd = reward_arm_file.fileno()
-            #    fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)                
-            #    reward_arm_file.write(str(1)+'\n')
-            #print('set tasktate to 1 at beginning')
 
         # not currently using this - might use in future
         # read arm_reward text file written by trodes to find last rewarded arm
@@ -1298,12 +1012,6 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     # this was 2 before
                     self.posterior_sum_statescript_message(self.other_arms[0], networkclient)
 
-        # marker for non-local event - i think this should be specific location of replay target
-        # need to lower for 4 arm (20?, 30?)
-        #if self.post_max > 10:
-        #    self.non_local_event = True
-        #else:
-        #    self.non_local_event = False
 
         # end lockout for non-local event
         # also using a timer - 200 msec
@@ -1320,211 +1028,6 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         elif not self._in_lockout:
             self.shortcut_message_sent = False
 
-        # # detection non-local event 
-        # # includes time lockout
-        # # NOTE: currently this will skip box time bins, and might end events early if there is a bin in box
-        # if (self.non_local_event and self.velocity < self.ripple_detect_velocity and not self._in_lockout):
-        #     print('detection of non-local event, decode timestamp',
-        #           self.bin_timestamp, np.around(timestamp / 30, decimals=2), 'event num:',self._lockout_count)
-        #     if self.taskState == 2:
-        #         print('arm1 replays:', self.arm1_replay_counter,
-        #               'arm2 replays:', self.arm2_replay_counter,
-        #               'arm3 replays:', self.arm3_replay_counter,
-        #               'arm4 replays:', self.arm4_replay_counter,)
-        #     #print('sent light message based on ripple thresh',time,timestamp)
-        #     #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['trigger(15);\n'])
-
-        #     # this starts the lockout for the content ripple threshold and tells us there is a ripple
-        #     self._in_lockout = True
-        #     self._last_lockout_timestamp = self.bin_timestamp
-        #     #print('last lockout timestamp',self._last_lockout_timestamp)
-        #     # this should allow us to tell difference between ripples that trigger conditioning
-        #     self.big_rip_message_sent = 0
-
-        #     self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-        #                       self.bin_timestamp, self.velocity, self._lockout_count, self._in_lockout,
-        #                       0, self.big_rip_message_sent, self.spike_count)
-
-
-        # # calculate sum and possibly send a message if end of event and event is >30 msec long
-        # # we only want this to happen once, so regardless of message, set self.shortcut_message_sent to True
-        # # new lockout end with spike count: replace posterior_in_lockout with _in_lockout (3 times below)
-
-        # # should increase required length: 50 or 100 msec
-
-        # # replace spike count threshold with st dev, before: 0.75*self.spike_count_base_avg 
-        # # replace ripple_time_bin with posterior_time_bin
-        # # replace shortcut_message_sent with ripple_end
-        # if (not self.non_local_event and self._in_lockout and not self.ripple_end and 
-        #     self.posterior_time_bin > 6 and self.velocity < self.ripple_detect_velocity):
-
-        #     # to send a shortcut message with every ripple
-        #     if self.rip_cond_only:
-        #         print('sent shortcut message for any ripple')
-        #         function_nums = [14]
-        #         shortcut_function = np.int(np.random.choice(function_nums,1)[0])
-        #         networkclient.sendStateScriptShortcutMessage(shortcut_function)
-        #         print('random statescript trigger',shortcut_function)
-        #         pass
-
-        #     # calculate sum of previous bins and then decide whether or not to send message
-        #     self.norm_posterior_arm_sum = self.posterior_sum_ripple / self.ripple_bin_count
-        #     print('sum of normalized posterior:',np.sum(self.norm_posterior_arm_sum),'bin count:',self.ripple_bin_count)
-
-        #     # check if current posterior sum is above 0.5 in any segment
-        #     #print('normalized arm sums',self.norm_posterior_arm_sum)
-        #     #print('post threshold',self.posterior_arm_threshold)
-        #     # note: this won't work if threshold is <0.5 and there are two segments > threshold -> goes to no segment
-        #     detected_region = np.argwhere(self.norm_posterior_arm_sum > self.posterior_arm_threshold)
-        #     #if len(detected_region == 1):
-        #     #    detected_region = detected_region[0][0]
-        #     if len(detected_region) > 0:
-        #         #if len(detected_region) > 1:
-        #         #    print('two segments for max')
-        #         #    print('posterior sum',self.norm_posterior_arm_sum)
-        #         detected_region = np.argmax(self.norm_posterior_arm_sum)
-        #         print('max segment',detected_region)
-
-        #         # replay detection of box - only send message for arm replays
-        #         if detected_region == 0:
-        #             #print('replay in box - no StateScript message. ripple', self._lockout_count,
-        #             #      'ripple time bin:',self.ripple_bin_count)
-        #             #print('time delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1))
-        #             self.shortcut_message_arm = 0
-
-        #             print('replay in box - no StateScript message. ripple', self._lockout_count,
-        #                   'ripple time bin:',self.ripple_bin_count)
-        #             print('time delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1))
-        #             # ripple_end prevents sum from running more than once per ripple
-        #             self.ripple_end = True
-        #             self.write_record(realtime_base.RecordIDs.STIM_MESSAGE, bin_timestamp, spike_timestamp, 
-        #                             self.lfp_timestamp, time, self.shortcut_message_sent, self._lockout_count,
-        #                               self.posterior_time_bin, (self.lfp_timestamp - self.bin_timestamp) / 30, 
-        #                               self.velocity, self.linearized_position,
-        #                               self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
-        #                               self.shortcut_message_arm, self.posterior_arm_threshold, 
-        #                               self.ripple_end, self.credible_avg,
-        #                               self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
-        #                               self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
-        #                               self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
-        #                               self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
-        #                               self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
-
-        #         else:
-        #             print('replay max in arm:', detected_region,'ripple time bin:',self.ripple_bin_count)
-                    
-        #             posterior_sum_arms = self.norm_posterior_arm_sum[1:]
-        #             other_arms_sum = np.delete(posterior_sum_arms, detected_region - 1)
-        #             if len(np.argwhere(other_arms_sum>=self.other_arm_thresh)):
-        #                 print('other arm filter. ripple:', self._lockout_count)
-        #                 print('time delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1))
-        #                 self.shortcut_message_arm = 98
-
-        #                 # these prevent sum from running more than once per ripple
-        #                 self.ripple_end = True                         
-        #                 self.write_record(realtime_base.RecordIDs.STIM_MESSAGE, bin_timestamp, spike_timestamp, 
-        #                             self.lfp_timestamp, time, self.shortcut_message_sent, self._lockout_count, 
-        #                             self.posterior_time_bin,(self.lfp_timestamp - self.bin_timestamp) / 30, 
-        #                             self.velocity, self.linearized_position,
-        #                               self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
-        #                               self.shortcut_message_arm, self.posterior_arm_threshold, 
-        #                               self.ripple_end, self.credible_avg,
-        #                               self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
-        #                               self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
-        #                               self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
-        #                               self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
-        #                               self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
-
-        #             else:
-        #                 self.posterior_sum_statescript_message(detected_region, networkclient)
-
-        #     # no maximum location for whole ripple
-        #     else:
-        #         #print('no segment above 0.5 - no StateScript message. ripple:', self._lockout_count,
-        #         #      'ripple time bin:',self.ripple_bin_count)
-        #         #print('time delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1))
-
-        #         print('no segment above 0.5 - no StateScript message. ripple:', self._lockout_count,
-        #           'ripple time bin:',self.ripple_bin_count)
-        #         print('time delay:', np.around((self.lfp_timestamp - self.bin_timestamp) / 30, decimals=1))                    
-        #         # these prevent sum from running more than once per ripple
-        #         self.ripple_end = True
-        #         self.write_record(realtime_base.RecordIDs.STIM_MESSAGE, bin_timestamp, spike_timestamp, 
-        #                     self.lfp_timestamp, time, self.shortcut_message_sent, self._lockout_count, 
-        #                     self.posterior_time_bin,(self.lfp_timestamp - self.bin_timestamp) / 30, 
-        #                     self.velocity, self.linearized_position,
-        #                       self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
-        #                       self.shortcut_message_arm, self.posterior_arm_threshold, 
-        #                       self.ripple_end, self.credible_avg,
-        #                       self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
-        #                       self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
-        #                       self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
-        #                       self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
-        #                       self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
-
-        # # velocity too high at end of ripple
-        # # yes! this seems to be source of the missing replays
-        # # so lets try taking out the velocity filter above and running it through
-        # #elif (self._in_lockout == True and np.count_nonzero(self.spk_count_avg < self.spike_count_base_avg) > 1 
-        # #    and self.velocity > self.config['ripple_conditioning']['ripple_detect_velocity'] 
-        # #    and self.shortcut_message_sent == False and self.ripple_bin_count > 0):
-        # #    print('high vel during ripple. ripple num:',self._lockout_count)
-        # # replace shortcut_message_sent with ripple_end
-
-        # # next if spk_count too high, keep adding to posterior sum and keep track of number of bins
-        # elif (self._in_lockout and self.velocity < self.ripple_detect_velocity
-        #         and not self.ripple_end):
-        #     self.posterior_time_bin += 1
-        #     self.shortcut_message_arm = 99
-        #     # to be safe i think we want to comment this out
-        #     #self.ripple_end = False
-        #     self.posterior_spike_count = self.posterior_spike_count + self.spike_count
-
-        #     if self.posterior_time_bin == 1:
-        #         # print('start of ripple. sum is ',np.around(self.norm_posterior_arm_sum,decimals=1),
-        #         #      np.around(self.sum_array_sum,decimals=1),np.around(new_posterior_sum,decimals=1))
-        #         print('start of content ripple.',self._lockout_count)
-
-        #         # start posterior_sum_ripple and ripple_bin_count with last 10 time bins - within posterior_sum_array
-        #         self.posterior_sum_ripple = self.posterior_sum_ripple + np.sum(self.posterior_sum_array,axis=0)
-        #         self.ripple_bin_count = self.config['ripple_conditioning']['post_sum_sliding_window']
-        #         self.norm_posterior_arm_sum = self.posterior_sum_ripple / self.ripple_bin_count
-        #         self.write_record(realtime_base.RecordIDs.STIM_MESSAGE, bin_timestamp, spike_timestamp, 
-        #                         self.lfp_timestamp, time, self.shortcut_message_sent, self._lockout_count, 
-        #                         self.posterior_time_bin,(self.lfp_timestamp - self.bin_timestamp) / 30, 
-        #                         self.velocity, self.linearized_position,
-        #                           self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
-        #                           self.shortcut_message_arm, self.posterior_arm_threshold, 
-        #                           self.ripple_end, self.credible_avg,
-        #                           self.max_arm_repeats, self.norm_posterior_arm_sum[0], 
-        #                           self.norm_posterior_arm_sum[1], self.norm_posterior_arm_sum[2],
-        #                           self.norm_posterior_arm_sum[3], self.norm_posterior_arm_sum[4], 
-        #                           self.norm_posterior_arm_sum[5], self.norm_posterior_arm_sum[6], 
-        #                           self.norm_posterior_arm_sum[7], self.norm_posterior_arm_sum[8])
-
-        #     else:
-        #         # add to posterior sum during ripple
-        #         self.posterior_sum_ripple = self.posterior_sum_ripple + new_posterior_sum
-        #         self.ripple_bin_count += 1
-        #         self.pos_trajectory[0][self.post_max] += 1
-
-        # elif not self._in_lockout:
-        #     self.shortcut_message_sent = False
-        #     self.ripple_end = False
-        #     self.posterior_time_bin = 0
-        #     self.posterior_spike_count = 0
-        #     self.posterior_sum_ripple = np.zeros((9,))
-        #     self.ripple_bin_count = 0
-        #     self.long_ripple = False
-        #     self.long_rip_sum_counter = 0
-        #     self.pos_trajectory = np.zeros((1,self.max_pos))
-
-        # timer if needed
-        # if self.running_post_sum_counter % 1 == 0:
-        #    self.record_timing(timestamp=spike_timestamp, elec_grp_id=0,
-        #                       datatype=datatypes.Datatypes.LFP, label='postsum_2')
-
- 
 
 class StimDeciderMPIRecvInterface(realtime_base.RealtimeMPIClass):
     def __init__(self, comm: MPI.Comm, rank, config, stim_decider: StimDecider, networkclient):
@@ -1609,19 +1112,6 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
                                     networkclient=self.networkclient)
             #print('posterior sum message supervisor: ',message.spike_timestamp,time*1000)
             # return posterior_sum
-
-        # can we put a condtional statement here to run posterior_sum every 8 LFP measurements (~5 msec)
-        # we bring in stim_decider to this class as stim so stim.thresh_counter should work
-        # will this work if there is no message??
-        # this doesnt seem to work because it gets triggered 10-20 times for each matching timestamp
-        # elif not rdy and self.stim.thresh_counter % 16 == 0 and self.stim.postsum_timing_counter > 0 and self.stim._posterior_in_lockout:
-            # self.stim.posterior_sum(bin_timestamp=message.bin_timestamp,spike_timestamp=message.spike_timestamp,
-            #                        box=message.box,arm1=message.arm1,
-            #                        arm2=message.arm2,arm3=message.arm3,arm4=message.arm4,arm5=message.arm5,
-            #                        arm6=message.arm6,arm7=message.arm7,arm8=message.arm8,
-            #                        spike_count=0,networkclient=self.networkclient)
-            #print('no spike posterior',self.stim.thresh_counter)
-            # with this version of running posterior_sum we want spike_count = 0, so we can count spikes accurately
 
         else:
             return None

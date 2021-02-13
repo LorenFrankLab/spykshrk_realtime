@@ -310,23 +310,10 @@ class PointProcessDecoder(rt_logging.LoggingClass):
 
     @staticmethod
     def _sungod_transition_matrix(self,uniform_gain,arm_coords,max_pos,pos_bins_1,number_arms):
-        # updated for 2 pixels 8-14-19
-        # arm_coords updated for 8 pixels 8-15-19
+
         # NOTE: by rounding up for binning position of outer arms, we get no position in first bin of each arm
         # we could just move the first position here in arm coords and then each arm will start 1 bin higher
         # based on looking at counts from position this should work, so each arm is 11 units
-
-        # make all these steps conditional on config number of arms
-
-        # 8 arm version
-        # see if we can use self.arm_coords instead and self.max_pos and self.pos_bins_1
-
-        #arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
-        #                      77, 88], [93, 104], [109, 120], [125, 136]])
-        # 4 arm version
-        #arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
-        #max_pos = arm_coords[-1][-1] + 1
-        #pos_bins = np.arange(0, max_pos, 1)
 
         uniform_gain = uniform_gain
         arm_coords = arm_coords
@@ -673,17 +660,6 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         return self.posterior, self.likelihood
 
     def calculate_posterior_arm_sum(self, posterior, ripple_time_bin):
-
-        # hmmmm we have defined arm_coords many places - try to just define it once
-        # this needs to take into account number of arms
-
-        # 8 arm version - i think this should match the transition matrix (before was all values-1, not sure why)
-        #arm_coords_rt = [[0, 8], [13, 24], [29, 40], [45, 56], [
-        #    61, 72], [77, 88], [93, 104], [109, 120], [125, 136]]
-        # we should be able to use self.arm_coords
-
-        # 4 arm version
-        #arm_coords_rt = [[0,8],[13,24],[29,40],[45,56],[61,72]]
 
         #post_sum_bin_length = 20
         posterior = posterior
@@ -1174,13 +1150,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.pp_decoder.update_position(
                     pos_timestamp=pos_data.timestamp, pos_data=pos_data.x, taskState=self.taskState)
             else:
-                #self.pp_decoder.update_position(pos_timestamp=pos_data.timestamp, pos_data=pos_data.x)
-                # we want to use linearized position here
-                # try calculating velocity with smoothed position, see if it looks better
-                #self.raw_x = pos_data.x
-                #self.raw_y = pos_data.y
-                #self.current_vel = self.velCalc.calculator(pos_data.x, pos_data.y)
-
                 # smooth position not velocity
                 # now try smooth position and then velocity
                 self.smooth_x = self.velCalc.smooth_x_position(pos_data.x)
@@ -1240,15 +1209,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                       self.taskState = np.int(new_taskState[0:1])
                       #print('taskState in decoder',self.taskState)
 
-                #print(pos_data.x, pos_data.segment)
-                # TODO implement trodes cameramodule update position function
-                # If data source is trodes, then pos_data is of class CameraModulePoint, in datatypes.py
-                #   pos_data.timestamp: trodes timestamp
-                #   pos_data.segment:   linear track segment animal is on (0 if none defined)
-                #   pos_data.position:  position along segment (0 if no linear tracks defined)
-                #   pos_data.x and y:   raw coordinates of animal, (0,0) is top left of image
-                #                        bottom right is full resolution of image
-                # Update position function implementation is left
                 pass
 
 
