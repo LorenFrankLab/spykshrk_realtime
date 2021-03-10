@@ -114,7 +114,7 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
             if not ntrode_id in self.ntrode_ids:
                 self.ntrode_ids.append(ntrode_id)
             else:
-                self.class_log.debug("Already streaming from ntrode id {ntrode_id}")
+                self.class_log.debug(f"Already streaming from ntrode id {ntrode_id}")
         else:
             self.class_log.debug("Already set up to stream position, doing nothing")
             return

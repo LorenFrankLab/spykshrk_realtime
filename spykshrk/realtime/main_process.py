@@ -140,9 +140,9 @@ class MainProcess(realtime_base.RealtimeProcess):
 
         self.manager = MainSimulatorManager(rank=rank, config=config, parent=self, send_interface=self.send_interface,
                                             stim_decider=self.stim_decider)
-        print('===============================')
+        print('======================================')
         print('In MainProcess: datasource = ', config['datasource'])
-        print('===============================')
+        print('======================================')
         if config['datasource'] == 'trodes':
             # print('about to configure trdoes network for tetrode: ',
             #       self.manager.handle_ntrode_list, self.rank)
@@ -211,7 +211,7 @@ class MainProcess(realtime_base.RealtimeProcess):
     def main_loop(self):
         # self.thread.start()
 
-        self.started = True
+        check_user_input = True
         t0 = time.time()
 
         # Synchronize rank times immediately
@@ -233,8 +233,9 @@ class MainProcess(realtime_base.RealtimeProcess):
 
                 # hacky way to start other processes once sufficient time has passed
                 # to receive binary record messages
-                if self.started and (time.time() - t0 > 15):
+                if check_user_input and (time.time() - t0 > 5):
                     x = input("Processes are presumably set up, press any key + ENTER to continue:")
+                    check_user_input = False
                     self.networkclient.start()
 
         self.class_log.info("Main Process Main reached end, exiting.")
@@ -1451,7 +1452,7 @@ class MainSimulatorManager(rt_logging.LoggingClass):
         for rank in self.config['rank']['decoder']:
             self.send_interface.send_turn_on_datastreams(rank)        
 
-        self.time_sync_on = True
+        # self.time_sync_on = True
 
     # MEC edited
     def handle_ntrode_list(self, trode_list):
