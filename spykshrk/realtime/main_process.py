@@ -233,7 +233,7 @@ class MainProcess(realtime_base.RealtimeProcess):
 
                 # hacky way to start other processes once sufficient time has passed
                 # to receive binary record messages
-                if check_user_input and (time.time() - t0 > 5):
+                if check_user_input and (time.time() - t0 > 15):
                     x = input("Processes are presumably set up, press any key + ENTER to continue:")
                     check_user_input = False
                     self.networkclient.start()
