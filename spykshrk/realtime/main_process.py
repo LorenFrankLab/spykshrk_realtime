@@ -1452,7 +1452,7 @@ class MainSimulatorManager(rt_logging.LoggingClass):
         for rank in self.config['rank']['decoder']:
             self.send_interface.send_turn_on_datastreams(rank)        
 
-        # self.time_sync_on = True
+        self.time_sync_on = True
 
     # MEC edited
     def handle_ntrode_list(self, trode_list):
