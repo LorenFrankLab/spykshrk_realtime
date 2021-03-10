@@ -22,6 +22,11 @@ class SpikePoint(PrintableMessage):
         self.elec_grp_id = elec_grp_id
         self.data = data
 
+    def update_data(self, data):
+        self.timestamp = data['localTimestamp']
+        self.elec_grp_id = data['nTrodeId']
+        self.data = data['samples']
+
     def pack(self):
         return struct.pack(self._byte_format, self.timestamp, self.elec_grp_id,
                            *self.data[0], *self.data[1], *self.data[2], *self.data[3])
@@ -47,6 +52,12 @@ class LFPPoint(PrintableMessage):
         self.ntrode_index = ntrode_index
         self.elec_grp_id = elec_grp_id
         self.data = data
+
+    def update_data(self, data, ntrode_index, elec_grp_id, data_index):
+        self.timestamp = data['localTimestamp']
+        self.ntrode_index = ntrode_index
+        self.elec_grp_id = elec_grp_id
+        self.data = data['lfpData'][data_index] # needs to be a scalar
 
     def pack(self):
         return struct.pack(self._byte_format, self.timestamp, self.ntrode_index, self.elec_grp_id, self.data)
@@ -93,6 +104,13 @@ class CameraModulePoint(PrintableMessage):
         self.position = position
         self.x = x
         self.y = y
+
+    def update_data(self, data):
+        self.timestamp = data['timestamp']
+        self.segment = data['lineSegment']
+        self.position = data['posOnSegment']
+        self.x = data['x']
+        self.y = data['y']
 
     def pack(self):
         return struct.pack(self._byte_format, self.timestamp, self.segment, self.position, self.x, self.y)

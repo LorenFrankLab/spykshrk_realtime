@@ -16,6 +16,7 @@ import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
 from spykshrk.realtime.datatypes import LFPPoint
 from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream, RippleChannelSelection
+from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 
 
 class RippleParameterMessage(rt_logging.PrintableMessage):
@@ -631,7 +632,6 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                 if self.lfp_counter % 100 == 0:
                     self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
                                         datatype=datatypes.Datatypes.LFP, label='rip_send')
-
                 # this sends to stim_decider class in main_process.py that then applies the # of tetrode filter
                 self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,
                                                        elec_grp_id=datapoint.elec_grp_id,
@@ -647,7 +647,6 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                 self.data_packet_counter += 1
                 if (self.data_packet_counter % 100000) == 0:
                     self.class_log.debug('Received {:} LFP datapoints.'.format(self.data_packet_counter))
-
             else:
                 self.class_log.warning('RippleManager should only receive LFP Data, instead received {:}'.
                                        format(type(datapoint)))
@@ -754,10 +753,11 @@ class RippleProcess(realtime_base.RealtimeProcess):
         elif self.config['datasource'] == 'trodes':
             print('about to configure trdoes network for ripple tetrode: ',self.rank)
             #time.sleep(10 + 2*self.rank)
-            data_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
-                                                                                rank=self.rank,
-                                                                                config=self.config,
-                                                                                datatype=datatypes.Datatypes.LFP)
+            # data_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
+            #                                                                     rank=self.rank,
+            #                                                                     config=self.config,
+            #                                                                     datatype=datatypes.Datatypes.LFP)
+            data_interface = TrodesNetworkDataReceiver(comm, rank, config, datatypes.Datatypes.LFP)
             print('finished trodes setup for tetrode: ',self.rank)
         else:
             raise realtime_base.DataSourceError("No valid data source selected")

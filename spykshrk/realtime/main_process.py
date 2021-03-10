@@ -70,6 +70,42 @@ class MainProcessClient(tnp.AbstractModuleClient):
     def recv_quit(self):
         self.terminate()
 
+# for minimal changes to the code.
+# when the statescript message is implemented,
+# we will have to make a different class for that
+# and change the code accordingly
+class TempMainProcessClient(object):
+    def __init__(self, config):
+        self.config = config
+        self.started = False
+
+    def register_start_callback(self, callback):
+        self.start_callback = callback
+
+    def register_start_callback_ripples(self, callback):
+        self.start_callback_ripples = callback
+
+    def register_termination_callback(self, callback):
+        self.terminate_callback = callback
+    
+    def start(self):
+        if not self.started:
+            self.start_callback(
+                self.config["trodes_network"]["decoding_tetrodes"]
+            )
+            self.start_callback_ripples(
+                self.config["trodes_network"]["ripple_tetrodes"]
+            )
+            self.started = True
+
+    def terminate(self):
+        self.terminate_callback()
+
+    def handle_interrupt(self, sig, frame):
+        self.terminate()
+
+    def sendStateScriptShortcutMessage(self, val):
+        pass
 
 class MainProcess(realtime_base.RealtimeProcess):
 
@@ -108,26 +144,39 @@ class MainProcess(realtime_base.RealtimeProcess):
         print('In MainProcess: datasource = ', config['datasource'])
         print('===============================')
         if config['datasource'] == 'trodes':
-            print('about to configure trdoes network for tetrode: ',
-                  self.manager.handle_ntrode_list, self.rank)
-            time.sleep(5+1*self.rank)
+            # print('about to configure trdoes network for tetrode: ',
+            #       self.manager.handle_ntrode_list, self.rank)
+            # time.sleep(5+1*self.rank)
 
-            self.networkclient = MainProcessClient(
-                "SpykshrkMainProc", config['trodes_network']['address'], config['trodes_network']['port'], self.config)
-            if self.networkclient.initialize() != 0:
-                print("Network could not successfully initialize")
-                del self.networkclient
-                quit()
-            # added MEC
-            self.networkclient.initializeHardwareConnection()
-            self.networkclient.registerStartupCallback(
+            # self.networkclient = MainProcessClient(
+            #     "SpykshrkMainProc", config['trodes_network']['address'], config['trodes_network']['port'], self.config)
+            # if self.networkclient.initialize() != 0:
+            #     print("Network could not successfully initialize")
+            #     del self.networkclient
+            #     quit()
+            # # added MEC
+            # self.networkclient.initializeHardwareConnection()
+            # self.networkclient.registerStartupCallback(
+            #     self.manager.handle_ntrode_list)
+            # # added MEC
+            # self.networkclient.registerStartupCallbackRippleTetrodes(
+            #     self.manager.handle_ripple_ntrode_list)
+            # self.networkclient.registerTerminationCallback(
+            #     self.manager.trigger_termination)
+            # print('completed trodes setup')
+
+            #############################################################
+            self.networkclient = TempMainProcessClient(config)
+            self.networkclient.register_start_callback(
                 self.manager.handle_ntrode_list)
-            # added MEC
-            self.networkclient.registerStartupCallbackRippleTetrodes(
-                self.manager.handle_ripple_ntrode_list)
-            self.networkclient.registerTerminationCallback(
-                self.manager.trigger_termination)
-            print('completed trodes setup')
+            self.networkclient.register_start_callback_ripples(
+                self.manager.handle_ripple_ntrode_list
+            )
+            self.networkclient.register_termination_callback(
+                self.manager.trigger_termination
+            )
+            self.class_log.info("Finished setting up callbacks")
+            #############################################################
 
         self.vel_pos_recv_interface = VelocityPositionRecvInterface(comm=comm, rank=rank, config=config,
                                                                     stim_decider=self.stim_decider,
@@ -147,6 +196,8 @@ class MainProcess(realtime_base.RealtimeProcess):
 
         self.mpi_status = MPI.Status()
 
+        self.started = False
+
         # First Barrier to finish setting up nodes, waiting for Simulator to send ntrode list.
         # The main loop must be active to receive binary record registration messages, so the
         # first Barrier is placed here.
@@ -160,22 +211,31 @@ class MainProcess(realtime_base.RealtimeProcess):
     def main_loop(self):
         # self.thread.start()
 
+        self.started = True
+        t0 = time.time()
+
         # Synchronize rank times immediately
         last_time_bin = int(time.time())
 
         while not self.terminate:
 
-            # Synchronize rank times
-            if self.manager.time_sync_on:
-                current_time_bin = int(time.time())
-                if current_time_bin >= last_time_bin + 10:
-                    self.manager.synchronize_time()
-                    last_time_bin = current_time_bin
+                # Synchronize rank times
+                if self.manager.time_sync_on:
+                    current_time_bin = int(time.time())
+                    if current_time_bin >= last_time_bin + 10:
+                        self.manager.synchronize_time()
+                        last_time_bin = current_time_bin
 
-            self.recv_interface.__next__()
-            self.data_recv.__next__()
-            self.vel_pos_recv_interface.__next__()
-            self.posterior_recv_interface.__next__()
+                self.recv_interface.__next__()
+                self.data_recv.__next__()
+                self.vel_pos_recv_interface.__next__()
+                self.posterior_recv_interface.__next__()
+
+                # hacky way to start other processes once sufficient time has passed
+                # to receive binary record messages
+                if self.started and (time.time() - t0 > 15):
+                    x = input("Processes are presumably set up, press any key + ENTER to continue:")
+                    self.networkclient.start()
 
         self.class_log.info("Main Process Main reached end, exiting.")
 

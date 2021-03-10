@@ -13,6 +13,7 @@ from spykshrk.realtime.camera_process import VelocityCalculator, LinearPositionA
 from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream
 from spykshrk.realtime.tetrode_models import kernel_encoder
 import spykshrk.realtime.rst.RSTPython as RST
+from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 
 #timer to send uniform intensity function every deocder time bin if a decoded spike was not sent
 class NoSpikeTimerThread(Thread):
@@ -561,15 +562,18 @@ class EncoderProcess(realtime_base.RealtimeProcess):
         elif self.config['datasource'] == 'trodes':
             print('about to configure network for decoding tetrode: ',self.rank)
             #time.sleep(10+2*self.rank)
-            spike_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
-                                                                        rank=self.rank,
-                                                                        config=self.config,
-                                                                        datatype=datatypes.Datatypes.SPIKES)
+            # spike_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
+            #                                                             rank=self.rank,
+            #                                                             config=self.config,
+            #                                                             datatype=datatypes.Datatypes.SPIKES)
 
-            pos_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
-                                                                      rank=self.rank,
-                                                                      config=self.config,
-                                                                      datatype=datatypes.Datatypes.LINEAR_POSITION)
+            # pos_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
+            #                                                           rank=self.rank,
+            #                                                           config=self.config,
+            #                                                           datatype=datatypes.Datatypes.LINEAR_POSITION)
+
+            spike_interface = TrodesNetworkDataReceiver(comm, rank, config, datatypes.Datatypes.SPIKES)
+            pos_interface = TrodesNetworkDataReceiver(comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
 
             print('finished trodes setup for tetrode: ',self.rank)
         self.enc_man = RStarEncoderManager(rank=rank,

@@ -17,6 +17,7 @@ from spykshrk.realtime import ripple_process
 from spykshrk.realtime.camera_process import (LinearPositionAssignment,
                                               VelocityCalculator)
 from spykshrk.realtime.simulator import simulator_process
+from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 
 
 class PosteriorSum(rt_logging.PrintableMessage):
@@ -1369,10 +1370,11 @@ class DecoderProcess(realtime_base.RealtimeProcess):
                                                                            config=self.config,
                                                                            datatype=datatypes.Datatypes.LINEAR_POSITION)
         elif config['datasource'] == 'trodes':
-            self.pos_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
-                                                                      rank=self.rank,
-                                                                      config=self.config,
-                                                                      datatype=datatypes.Datatypes.LINEAR_POSITION)
+            # self.pos_interface = simulator_process.TrodesDataReceiver(comm=self.comm,
+            #                                                           rank=self.rank,
+            #                                                           config=self.config,
+            #                                                           datatype=datatypes.Datatypes.LINEAR_POSITION)
+            self.pos_interface = TrodesNetworkDataReceiver(comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
 
         if config['decoder'] == 'bayesian_decoder':
             self.dec_man = BayesianDecodeManager(rank=rank, config=config,
