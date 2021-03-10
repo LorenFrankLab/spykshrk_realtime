@@ -1,4 +1,5 @@
 from zmq import ZMQError
+import numpy as np
 import xml.etree.ElementTree as ET
 
 from spykshrk.realtime.datatypes import Datatypes
@@ -29,14 +30,11 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
         super().__init__(comm, rank, config, datatype)
 
         if self.datatype == Datatypes.LFP:
-            self.datapoint = LFPPoint(None, None, None, None)
             self.sub_obj = SourceSubscriber('source.lfp')
         elif self.datatype == Datatypes.SPIKES:
-            self.datapoint = SpikePoint(None, None, None)
             self.sub_obj = SourceSubscriber('source.spikes')
         else:
             self.sub_obj = SourceSubscriber('source.position')
-            self.datapoint = CameraModulePoint(None, None, None, None, None)
         
         self.start = False
         self.stop = False
@@ -59,13 +57,15 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
             if self.ntrode_id_ind % self.n_subbed == 0:
                 self.ntrode_id_ind = 0
             else:
-                self.class_log.info(f"ntrode_id_ind is {self.ntrode_id_ind}")
                 ind = self.inds_to_extract[self.ntrode_id_ind]
                 ntid = self.ntrode_ids[self.ntrode_id_ind]
-                self.datapoint.update_data(self.temp_data, ind, ntid, ind)
+                datapoint = LFPPoint(
+                    self.temp_data['localTimestamp'],
+                    ind,
+                    ntid,
+                    self.temp_data['lfpData'][ind])
                 self.ntrode_id_ind += 1
-                self.class_log.debug("Retuning multi sample LFP")
-                return self.datapoint, None
+                return datapoint, None
         
         try:
             self.temp_data = self.sub_obj.receive(noblock=True)
@@ -74,26 +74,36 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
                 
                 ind = self.inds_to_extract[self.ntrode_id_ind]
                 ntid = self.ntrode_ids[self.ntrode_id_ind]
-                self.datapoint.update_data(self.temp_data, ind, ntid, ind)
+                datapoint = LFPPoint(
+                    self.temp_data['localTimestamp'],
+                    ind,
+                    ntid,
+                    self.temp_data['lfpData'][ind])
                 if self.is_subbed_multiple:
-                    self.class_log.debug("Multiple")
                     self.ntrode_id_ind += 1
-                self.class_log.debug("Returning LFP")
-                return self.datapoint, None
+                return datapoint, None
 
             elif self.datatype == Datatypes.SPIKES:
                 
                 ntid = self.temp_data['nTrodeId']
                 if ntid in self.ntrode_ids:
-                    self.datapoint.update_data(self.temp_data)
-                    return self.datapoint, None
+                    datapoint = SpikePoint(
+                        self.temp_data['localTimestamp'],
+                        ntid,
+                        np.array(self.temp_data['samples']))
+                    return datapoint, None
                 else:
                     return None
             
             else:
 
-                self.datapoint.update_data(self.temp_data)
-                return self.datapoint, None
+                datapoint = CameraModulePoint(
+                    self.temp_data['timestamp'],
+                    self.temp_data['lineSegment'],
+                    self.temp_data['posOnSegment'],
+                    self.temp_data['x'],
+                    self.temp_data['y'])
+                return datapoint, None
 
         except ZMQError:
             return None
