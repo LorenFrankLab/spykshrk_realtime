@@ -15,7 +15,9 @@ import spykshrk.realtime.realtime_logging as rt_logging
 import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
 from spykshrk.realtime.datatypes import LFPPoint
-from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream, RippleChannelSelection
+from spykshrk.realtime.realtime_base import (
+    ChannelSelection, TurnOnDataStream, RippleChannelSelection,
+    BinaryRecordSendComplete)
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 
 
@@ -460,6 +462,9 @@ class RippleMPISendInterface(realtime_base.RealtimeMPIClass):
         for message in record_register_messages:
             self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+        self.comm.send(
+            obj=BinaryRecordSendComplete(), dest=self.config['rank']['supervisor'],
+            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     def send_ripple_status_message(self, status_dict_list):
         if len(status_dict_list) == 0:

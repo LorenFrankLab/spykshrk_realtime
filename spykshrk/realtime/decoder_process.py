@@ -18,6 +18,7 @@ from spykshrk.realtime.camera_process import (LinearPositionAssignment,
                                               VelocityCalculator)
 from spykshrk.realtime.simulator import simulator_process
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
+from spykshrk.realtime.realtime_base import BinaryRecordSendComplete
 
 
 class PosteriorSum(rt_logging.PrintableMessage):
@@ -102,6 +103,9 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
         for message in record_register_messages:
             self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+        self.comm.send(
+            obj=BinaryRecordSendComplete(), dest=self.config['rank']['supervisor'],
+            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     # def sending posterior message to supervisor with POSTERIOR tag
     def send_posterior_message(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank, tet1,tet2,tet3,tet4,tet5):

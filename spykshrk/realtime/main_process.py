@@ -214,7 +214,6 @@ class MainProcess(realtime_base.RealtimeProcess):
         # self.thread.start()
 
         check_user_input = True
-        t0 = time.time()
 
         # Synchronize rank times immediately
         last_time_bin = int(time.time())
@@ -235,8 +234,9 @@ class MainProcess(realtime_base.RealtimeProcess):
 
                 # hacky way to start other processes once sufficient time has passed
                 # to receive binary record messages
-                if check_user_input and (time.time() - t0 > 15):
-                    x = input("Processes are presumably set up, press any key + ENTER to continue:")
+                if check_user_input and self.manager.all_ranks_set_up:
+                    print("********************************************************", flush=True)
+                    x = input("All ranks are set up, press any key + ENTER to continue:")
                     check_user_input = False
                     self.networkclient.start()
 
@@ -1308,6 +1308,10 @@ class MainSimulatorManager(rt_logging.LoggingClass):
                                            mpi_rank=self.rank,
                                            file_postfix=self.config['files']['timing_postfix'])
 
+        self.recv_from_ranks = [rank for rank in range(self.parent.comm.Get_size()) if rank is not self.rank]
+        self.set_up_ranks = []
+        self.all_ranks_set_up = False
+
         # stim decider bypass the normal record registration message sending
         for message in stim_decider.get_record_register_messages():
             self.rec_manager.register_rec_type_message(message)
@@ -1490,6 +1494,12 @@ class MainSimulatorManager(rt_logging.LoggingClass):
 
         self.parent.trigger_termination()
 
+    def update_all_rank_setup_status(self, rank):
+        self.set_up_ranks.append(rank)
+        if sorted(self.set_up_ranks) == self.recv_from_ranks:
+            self.all_ranks_set_up = True
+            self.class_log.info(f"Received from {self.set_up_ranks}, expected {self.recv_from_ranks}")
+
 
 class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):
 
@@ -1541,3 +1551,6 @@ class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):
                                 format(self.mpi_status.source))
 
             self.main_manager.trigger_termination()
+
+        elif isinstance(message, realtime_base.BinaryRecordSendComplete):
+            self.main_manager.update_all_rank_setup_status(self.mpi_status.source)

@@ -508,3 +508,7 @@ class RippleChannelSelection(rt_logging.PrintableMessage):
 class TurnOnDataStream(rt_logging.PrintableMessage):
     def __init__(self):
         pass
+
+class BinaryRecordSendComplete(PrintableMessage):
+    def __init__(self):
+        pass

@@ -10,7 +10,7 @@ from spykshrk.realtime.simulator import simulator_process
 
 from spykshrk.realtime.datatypes import SpikePoint, LinearPosPoint, CameraModulePoint
 from spykshrk.realtime.camera_process import VelocityCalculator, LinearPositionAssignment
-from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream
+from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream, BinaryRecordSendComplete
 from spykshrk.realtime.tetrode_models import kernel_encoder
 import spykshrk.realtime.rst.RSTPython as RST
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
@@ -113,6 +113,9 @@ class EncoderMPISendInterface(realtime_base.RealtimeMPIClass):
         for message in record_register_messages:
             self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+        self.comm.send(
+            obj=BinaryRecordSendComplete(), dest=self.config['rank']['supervisor'],
+            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
         self.class_log.debug("Done sending binary record registration messages.")
 
     def send_decoded_spike(self, query_result_message: SpikeDecodeResultsMessage):
