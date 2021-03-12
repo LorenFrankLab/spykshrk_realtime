@@ -15,7 +15,7 @@ import spykshrk.realtime.ripple_process as ripple_process
 import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
 from mpi4py import MPI
-from spikegadgets import trodesnetwork as tnp
+# from spikegadgets import trodesnetwork as tnp
 
 # try:
 #     __IPYTHON__
@@ -29,46 +29,48 @@ from spikegadgets import trodesnetwork as tnp
 #     print('Warning: Attribute Error ({}), disabling IPython TerminalPdb.'.format(err))
 #     bp = lambda: None
 
+############################################################################
+# Remove altogether when system has stabilized to new network API
+############################################################################
+# class MainProcessClient(tnp.AbstractModuleClient):
+#     def __init__(self, name, addr, port, config):
+#         super().__init__(name, addr, port)
+#         # self.main_manager = main_manager
+#         self.config = config
+#         self.started = False
+#         self.ntrode_list_sent = False
+#         self.terminated = False
 
-class MainProcessClient(tnp.AbstractModuleClient):
-    def __init__(self, name, addr, port, config):
-        super().__init__(name, addr, port)
-        # self.main_manager = main_manager
-        self.config = config
-        self.started = False
-        self.ntrode_list_sent = False
-        self.terminated = False
+#     def registerTerminationCallback(self, callback):
+#         self.terminate = callback
 
-    def registerTerminationCallback(self, callback):
-        self.terminate = callback
+#     def registerStartupCallback(self, callback):
+#         self.startup = callback
 
-    def registerStartupCallback(self, callback):
-        self.startup = callback
+#     # MEC added: to get ripple tetrode list
+#     def registerStartupCallbackRippleTetrodes(self, callback):
+#         self.startupRipple = callback
 
-    # MEC added: to get ripple tetrode list
-    def registerStartupCallbackRippleTetrodes(self, callback):
-        self.startupRipple = callback
+#     def recv_acquisition(self, command, timestamp):
+#         if command == tnp.acq_PLAY:
+#             if not self.ntrode_list_sent:
+#                 self.startup(
+#                     self.config['trodes_network']['decoding_tetrodes'])
+#                 # added MEC
+#                 self.startupRipple(
+#                     self.config['trodes_network']['ripple_tetrodes'])
+#                 self.started = True
+#                 self.ntrode_list_sent = True
 
-    def recv_acquisition(self, command, timestamp):
-        if command == tnp.acq_PLAY:
-            if not self.ntrode_list_sent:
-                self.startup(
-                    self.config['trodes_network']['decoding_tetrodes'])
-                # added MEC
-                self.startupRipple(
-                    self.config['trodes_network']['ripple_tetrodes'])
-                self.started = True
-                self.ntrode_list_sent = True
+#         if command == tnp.acq_STOP:
+#             if not self.terminated:
+#                 # self.main_manager.trigger_termination()
+#                 self.terminate()
+#                 self.terminated = True
+#                 self.started = False
 
-        if command == tnp.acq_STOP:
-            if not self.terminated:
-                # self.main_manager.trigger_termination()
-                self.terminate()
-                self.terminated = True
-                self.started = False
-
-    def recv_quit(self):
-        self.terminate()
+#     def recv_quit(self):
+#         self.terminate()
 
 # for minimal changes to the code.
 # when the statescript message is implemented,
