@@ -42,6 +42,7 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
         self.ntrode_ids = [] # only applicable for spikes and LFP
         self.inds_to_extract = None # only applicable for LFP
         self.ntrode_id_ind = 0 # only applicable for LFP
+        self.scale_factor = self.config["trodes"]["voltage_scaling_factor"]
 
         self.temp_data = None
 
@@ -63,7 +64,7 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
                     self.temp_data['localTimestamp'],
                     ind,
                     ntid,
-                    self.temp_data['lfpData'][ind])
+                    self.temp_data['lfpData'][ind] * self.scale_factor)
                 self.ntrode_id_ind += 1
                 return datapoint, None
         
@@ -78,7 +79,7 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
                     self.temp_data['localTimestamp'],
                     ind,
                     ntid,
-                    self.temp_data['lfpData'][ind])
+                    self.temp_data['lfpData'][ind] * self.scale_factor)
                 if self.is_subbed_multiple:
                     self.ntrode_id_ind += 1
                 return datapoint, None
@@ -90,7 +91,7 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
                     datapoint = SpikePoint(
                         self.temp_data['localTimestamp'],
                         ntid,
-                        np.array(self.temp_data['samples']))
+                        np.array(self.temp_data['samples']) * self.scale_factor)
                     return datapoint, None
                 else:
                     return None
