@@ -28,6 +28,8 @@ class MPIMessageTag(IntEnum):
     POSTERIOR = 22
     VEL_POS = 23
 
+    DATA_FOR_GUI = 30
+
 
 class RecordIDs(IntEnum):
     RIPPLE_STATE = 1

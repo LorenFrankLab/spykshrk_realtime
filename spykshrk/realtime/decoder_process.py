@@ -18,7 +18,7 @@ from spykshrk.realtime.camera_process import (LinearPositionAssignment,
                                               VelocityCalculator)
 from spykshrk.realtime.simulator import simulator_process
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
-from spykshrk.realtime.realtime_base import BinaryRecordSendComplete
+from spykshrk.realtime.realtime_base import BinaryRecordSendComplete, MPIMessageTag
 
 
 class PosteriorSum(rt_logging.PrintableMessage):
@@ -206,6 +206,17 @@ class LFPTimekeeperRecvInterface(realtime_base.RealtimeMPIClass):
             else:
                 return None
 
+class DecoderGuiSendInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config):
+        super().__init__(comm, rank, config)
+        self.buf = np.zeros(self.config["encoder"]["position"]["bins"])
+        self.req = None
+
+    def send_posterior(self, data):
+        self.comm.Send(
+            buf=data,
+            dest=self.config["rank"]["gui"],
+            tag=MPIMessageTag.DATA_FOR_GUI)
 
 class PointProcessDecoder(rt_logging.LoggingClass):
 
@@ -694,7 +705,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
 class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
     def __init__(self, rank, config, local_rec_manager, send_interface: DecoderMPISendInterface,
                  spike_decode_interface: SpikeDecodeRecvInterface, pos_interface: realtime_base.DataSourceReceiver,
-                 lfp_interface: LFPTimekeeperRecvInterface):
+                 lfp_interface: LFPTimekeeperRecvInterface, gui_send_interface: DecoderGuiSendInterface):
         super(PPDecodeManager, self).__init__(rank=rank,
                                               local_rec_manager=local_rec_manager,
                                               send_interface=send_interface,
@@ -738,6 +749,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_dec_interface = spike_decode_interface
         self.pos_interface = pos_interface
         self.lfp_interface = lfp_interface
+        self.gui_send_interface = gui_send_interface
 
         # initialize velocity calc and linear position assignment functions
         self.raw_x = 0
@@ -1142,8 +1154,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                   self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
                                   self.posterior_arm_sum[0][8],self.crit_ind,self.rank,
                                   np.int(self.dropped_spikes),np.int(self.duplicate_spikes),
-                                  *posterior)                
-                
+                                  *posterior) 
+
+            self.gui_send_interface.send_posterior(posterior)           
+
         # position and velocity loop
         pos_msg = self.pos_interface.__next__()
 
@@ -1367,6 +1381,9 @@ class DecoderProcess(realtime_base.RealtimeProcess):
             comm=comm, rank=rank, config=config)
         self.lfp_interface = LFPTimekeeperRecvInterface(
             comm=comm, rank=rank, config=config)
+        self.gui_send_interface = DecoderGuiSendInterface(
+            comm=comm, rank=rank, config=config
+        )
 
         if config['datasource'] == 'simulator':
             self.pos_interface = simulator_process.SimulatorRemoteReceiver(comm=self.comm,
@@ -1391,7 +1408,8 @@ class DecoderProcess(realtime_base.RealtimeProcess):
                                            send_interface=self.mpi_send,
                                            spike_decode_interface=self.spike_decode_interface,
                                            pos_interface=self.pos_interface,
-                                           lfp_interface=self.lfp_interface)
+                                           lfp_interface=self.lfp_interface,
+                                           gui_send_interface=self.gui_send_interface)
 
         self.mpi_recv = DecoderRecvInterface(
             comm=comm, rank=rank, config=config, decode_manager=self.dec_man)

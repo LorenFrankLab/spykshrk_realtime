@@ -1301,7 +1301,9 @@ class MainSimulatorManager(rt_logging.LoggingClass):
                                            mpi_rank=self.rank,
                                            file_postfix=self.config['files']['timing_postfix'])
 
-        self.recv_from_ranks = [rank for rank in range(self.parent.comm.Get_size()) if rank is not self.rank]
+        self.ranks_sending_recs = list(range(self.parent.comm.Get_size()))
+        self.ranks_sending_recs.remove(self.rank)
+        self.ranks_sending_recs.remove(self.config["rank"]["gui"])
         self.set_up_ranks = []
         self.all_ranks_set_up = False
 
@@ -1494,9 +1496,9 @@ class MainSimulatorManager(rt_logging.LoggingClass):
 
     def update_all_rank_setup_status(self, rank):
         self.set_up_ranks.append(rank)
-        if sorted(self.set_up_ranks) == self.recv_from_ranks:
+        if sorted(self.set_up_ranks) == self.ranks_sending_recs:
             self.all_ranks_set_up = True
-            self.class_log.debug(f"Received from {self.set_up_ranks}, expected {self.recv_from_ranks}")
+            self.class_log.debug(f"Received from {self.set_up_ranks}, expected {self.ranks_sending_recs}")
 
 
 class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):

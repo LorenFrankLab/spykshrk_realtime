@@ -8,7 +8,8 @@ import os.path
 import getopt
 from mpi4py import MPI
 
-from spykshrk.realtime import main_process, ripple_process, encoder_process, decoder_process
+from spykshrk.realtime import (main_process, ripple_process, encoder_process,
+                               decoder_process, gui_process)
 from spykshrk.realtime.simulator import simulator_process
 
 def main(argv):
@@ -90,6 +91,8 @@ def main(argv):
         process = ripple_process.RippleProcess(comm, rank, config=config)
     elif rank in config["rank"]["encoders"]:
         process = encoder_process.EncoderProcess(comm, rank, config=config)
+    elif rank == config["rank"]["gui"]:
+        process = gui_process.GuiProcess(comm, rank, config)
     else:
         raise Exception(f"Could not assign rank {rank} to appropriate process")
 
