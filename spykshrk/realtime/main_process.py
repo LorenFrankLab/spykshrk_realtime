@@ -15,6 +15,10 @@ import spykshrk.realtime.ripple_process as ripple_process
 import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
 from mpi4py import MPI
+
+from trodesnetwork.trodes import TrodesAcquisitionSubscriber, TrodesHardware
+from zmq import ZMQError
+import logging
 # from spikegadgets import trodesnetwork as tnp
 
 # try:
@@ -76,38 +80,33 @@ from mpi4py import MPI
 # when the statescript message is implemented,
 # we will have to make a different class for that
 # and change the code accordingly
-class TempMainProcessClient(object):
-    def __init__(self, config):
+class MainProcessClient(object):
+    def __init__(self, config, manager):
         self.config = config
+        self.manager = manager
         self.started = False
 
-    def register_start_callback(self, callback):
-        self.start_callback = callback
+        address = self.config["trodes_network"]["address"]
+        port = self.config["trodes_network"]["port"]
+        server_address = address + ":" + str(port)
+        self.acq_sub = TrodesAcquisitionSubscriber(server_address=server_address)
+        self.trodes_hardware = TrodesHardware(server_address=server_address)
 
-    def register_start_callback_ripples(self, callback):
-        self.start_callback_ripples = callback
+    def send_statescript_shortcut_message(self, val):
+        self.trodes_hardware.ecu_shortcut_message(val)
 
-    def register_termination_callback(self, callback):
-        self.terminate_callback = callback
-    
-    def start(self):
-        if not self.started:
-            self.start_callback(
-                self.config["trodes_network"]["decoding_tetrodes"]
-            )
-            self.start_callback_ripples(
-                self.config["trodes_network"]["ripple_tetrodes"]
-            )
-            self.started = True
+    def __next__(self):
+        try:
+            data = self.acq_sub.receive(noblock=True)
 
-    def terminate(self):
-        self.terminate_callback()
-
-    def handle_interrupt(self, sig, frame):
-        self.terminate()
-
-    def sendStateScriptShortcutMessage(self, val):
-        pass
+            # only start up once
+            if data['command'] == 'play' and not self.started:
+                self.manager.start()
+                self.started = True
+            if data['command'] == 'stop':
+                self.manager.trigger_termination()
+        except ZMQError:
+            pass
 
 class MainProcess(realtime_base.RealtimeProcess):
 
@@ -168,16 +167,7 @@ class MainProcess(realtime_base.RealtimeProcess):
             # print('completed trodes setup')
 
             #############################################################
-            self.networkclient = TempMainProcessClient(config)
-            self.networkclient.register_start_callback(
-                self.manager.handle_ntrode_list)
-            self.networkclient.register_start_callback_ripples(
-                self.manager.handle_ripple_ntrode_list
-            )
-            self.networkclient.register_termination_callback(
-                self.manager.trigger_termination
-            )
-            self.class_log.info("Finished setting up callbacks")
+            self.networkclient = MainProcessClient(config, self.manager)
             #############################################################
 
         self.vel_pos_recv_interface = VelocityPositionRecvInterface(comm=comm, rank=rank, config=config,
@@ -231,14 +221,17 @@ class MainProcess(realtime_base.RealtimeProcess):
                 self.data_recv.__next__()
                 self.vel_pos_recv_interface.__next__()
                 self.posterior_recv_interface.__next__()
+                self.networkclient.__next__()
 
                 # hacky way to start other processes once sufficient time has passed
                 # to receive binary record messages
                 if check_user_input and self.manager.all_ranks_set_up:
-                    print("********************************************************", flush=True)
-                    x = input("All ranks are set up, press any key + ENTER to continue:")
+                    print("***************************************", flush=True)
+                    print("   All ranks are set up, ok to start   ", flush=True)
+                    print("***************************************", flush=True)
+                    # x = input("All ranks are set up, press any key + ENTER to continue:")
                     check_user_input = False
-                    self.networkclient.start()
+                    # self.networkclient.start()
 
         self.class_log.info("Main Process Main reached end, exiting.")
 
@@ -641,7 +634,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self.center_well_proximity and 
                 np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0]>=self.min_unique_tets):
                 # NOTE: we can now replace this with the actual shortcut message!
-                networkclient.sendStateScriptShortcutMessage(14)
+                networkclient.send_statescript_shortcut_message(14)
                 print('replay conditoning: statescript trigger 14')
 
                 # old statescript message
@@ -1486,6 +1479,11 @@ class MainSimulatorManager(rt_logging.LoggingClass):
         self._writer_startup()
         self._turn_on_datastreams()
 
+    def start(self):
+        self.class_log.debug("Starting up")
+        self.handle_ntrode_list(self.config["trodes_network"]["decoding_tetrodes"])
+        self.handle_ripple_ntrode_list(self.config["trodes_network"]["ripple_tetrodes"])
+
     def register_rec_type_message(self, message):
         self.rec_manager.register_rec_type_message(message)
 
@@ -1498,7 +1496,7 @@ class MainSimulatorManager(rt_logging.LoggingClass):
         self.set_up_ranks.append(rank)
         if sorted(self.set_up_ranks) == self.recv_from_ranks:
             self.all_ranks_set_up = True
-            self.class_log.info(f"Received from {self.set_up_ranks}, expected {self.recv_from_ranks}")
+            self.class_log.debug(f"Received from {self.set_up_ranks}, expected {self.recv_from_ranks}")
 
 
 class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):

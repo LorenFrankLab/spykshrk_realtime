@@ -29,12 +29,16 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
             raise TypeError(f"Invalid datatype {datatype}")
         super().__init__(comm, rank, config, datatype)
 
+        address = self.config["trodes_network"]["address"]
+        port = self.config["trodes_network"]["port"]
+        server_address = address + ":" + str(port)
+        
         if self.datatype == Datatypes.LFP:
-            self.sub_obj = SourceSubscriber('source.lfp')
+            self.sub_obj = SourceSubscriber('source.lfp', server_address=server_address)
         elif self.datatype == Datatypes.SPIKES:
-            self.sub_obj = SourceSubscriber('source.spikes')
+            self.sub_obj = SourceSubscriber('source.waveforms', server_address=server_address)
         else:
-            self.sub_obj = SourceSubscriber('source.position')
+            self.sub_obj = SourceSubscriber('source.position', server_address=server_address)
         
         self.start = False
         self.stop = False
