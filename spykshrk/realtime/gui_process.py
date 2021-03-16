@@ -379,6 +379,8 @@ class DecodingResultsWindow(QMainWindow):
         )
         self.mpi_status = MPI.Status()
 
+        self.ok_to_terminate = False
+
     def show_all(self):
         self.show()
         self.parameters_dialog.show()
@@ -406,9 +408,10 @@ class DecodingResultsWindow(QMainWindow):
 
     def process_command(self, message):
         if isinstance(message, TerminateMessage):
+            self.ok_to_terminate = True
             show_message(
                 self,
-                "Processes have terminated, ok to close GUI",
+                "Processes have terminated, closing GUI",
                 kind="information"
             )
             self.close()
@@ -431,6 +434,7 @@ class DecodingResultsWindow(QMainWindow):
 
     def update_data(self):
         for ii in range(len(self.plots)):
+            self.posterior_datas[ii][np.isnan(self.posterior_datas[ii])] = 0
             self.images[ii].setImage(self.posterior_datas[ii].T * 255)
     
     def run(self):
@@ -444,17 +448,14 @@ class DecodingResultsWindow(QMainWindow):
         self.timer2.start()
 
     def closeEvent(self, event):
-        msg = QMessageBox(self)
-        msg.setText("Exit GUI?")
-        msg.setIcon(QMessageBox.Question)
-        msg.addButton(QMessageBox.Yes)
-        msg.addButton(QMessageBox.No)
-        msg.setDefaultButton(QMessageBox.Yes)
-
-        if msg.exec_() == QMessageBox.Yes:
-            super().closeEvent(event)
-        else:
+        if not self.ok_to_terminate:
+            show_message(
+                self,
+                "Processes not finished running. Closing GUI is disabled",
+                kind="critical")
             event.ignore()
+        else:
+            super().closeEvent(event)
 
 class GuiProcess(RealtimeProcess):
 
