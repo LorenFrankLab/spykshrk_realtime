@@ -14,7 +14,7 @@ import spykshrk.realtime.simulator.sim_databuffer as sim_databuffer
 from spykshrk.realtime import binary_record
 import spykshrk.realtime.timing_system as timing_system
 
-from spikegadgets import trodesnetwork as tnp
+#from spikegadgets import trodesnetwork as tnp
 
 class SimulatorError(RuntimeError):
     pass
@@ -145,7 +145,7 @@ class TrodesDataReceiver(realtime_base.DataSourceReceiver):
         if n:
             #print('5')
             byteswritten = 0
-            systime = tnp.systemTimeMSecs()
+            #systime = tnp.systemTimeMSecs()
             if self.datatype is datatypes.Datatypes.LFP:
                 #print('lfp data 2nd loop',self.buf)
                 self.timestamp = self.datastream.getData()

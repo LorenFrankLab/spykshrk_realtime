@@ -15,7 +15,7 @@ import spykshrk.realtime.ripple_process as ripple_process
 import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
 from mpi4py import MPI
-from spikegadgets import trodesnetwork as tnp
+#from spikegadgets import trodesnetwork as tnp
 
 # try:
 #     __IPYTHON__
@@ -30,45 +30,45 @@ from spikegadgets import trodesnetwork as tnp
 #     bp = lambda: None
 
 
-class MainProcessClient(tnp.AbstractModuleClient):
-    def __init__(self, name, addr, port, config):
-        super().__init__(name, addr, port)
-        # self.main_manager = main_manager
-        self.config = config
-        self.started = False
-        self.ntrode_list_sent = False
-        self.terminated = False
+# class MainProcessClient(tnp.AbstractModuleClient):
+#     def __init__(self, name, addr, port, config):
+#         super().__init__(name, addr, port)
+#         # self.main_manager = main_manager
+#         self.config = config
+#         self.started = False
+#         self.ntrode_list_sent = False
+#         self.terminated = False
 
-    def registerTerminationCallback(self, callback):
-        self.terminate = callback
+#     def registerTerminationCallback(self, callback):
+#         self.terminate = callback
 
-    def registerStartupCallback(self, callback):
-        self.startup = callback
+#     def registerStartupCallback(self, callback):
+#         self.startup = callback
 
-    # MEC added: to get ripple tetrode list
-    def registerStartupCallbackRippleTetrodes(self, callback):
-        self.startupRipple = callback
+#     # MEC added: to get ripple tetrode list
+#     def registerStartupCallbackRippleTetrodes(self, callback):
+#         self.startupRipple = callback
 
-    def recv_acquisition(self, command, timestamp):
-        if command == tnp.acq_PLAY:
-            if not self.ntrode_list_sent:
-                self.startup(
-                    self.config['trodes_network']['decoding_tetrodes'])
-                # added MEC
-                self.startupRipple(
-                    self.config['trodes_network']['ripple_tetrodes'])
-                self.started = True
-                self.ntrode_list_sent = True
+#     def recv_acquisition(self, command, timestamp):
+#         if command == tnp.acq_PLAY:
+#             if not self.ntrode_list_sent:
+#                 self.startup(
+#                     self.config['trodes_network']['decoding_tetrodes'])
+#                 # added MEC
+#                 self.startupRipple(
+#                     self.config['trodes_network']['ripple_tetrodes'])
+#                 self.started = True
+#                 self.ntrode_list_sent = True
 
-        if command == tnp.acq_STOP:
-            if not self.terminated:
-                # self.main_manager.trigger_termination()
-                self.terminate()
-                self.terminated = True
-                self.started = False
+#         if command == tnp.acq_STOP:
+#             if not self.terminated:
+#                 # self.main_manager.trigger_termination()
+#                 self.terminate()
+#                 self.terminated = True
+#                 self.started = False
 
-    def recv_quit(self):
-        self.terminate()
+#     def recv_quit(self):
+#         self.terminate()
 
 # for minimal changes to the code.
 # when the statescript message is implemented,
@@ -233,7 +233,7 @@ class MainProcess(realtime_base.RealtimeProcess):
 
                 # hacky way to start other processes once sufficient time has passed
                 # to receive binary record messages
-                if check_user_input and (time.time() - t0 > 15):
+                if check_user_input and (time.time() - t0 > 30):
                     x = input("Processes are presumably set up, press any key + ENTER to continue:")
                     check_user_input = False
                     self.networkclient.start()
@@ -566,7 +566,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             if ((num_above >= self._ripple_n_above_thresh) and not self._in_ripple_lockout):
                 if self.velocity < 10:
                     print('detection of ripple. timestamp',self.bin_timestamp_1, 
-                    'ripple num:',self._ripple_lockout_count)
+                    'ripple num:',self._ripple_lockout_count, flush=True)
 
                 # this starts the lockout for the content ripple threshold and tells us there is a ripple
                 self._in_ripple_lockout = True
@@ -588,8 +588,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #remove posterior_time_bin from printing b/c we arent using it now
 
         if self.taskState == 2 and self.linearized_position<8:
-            print('reward count. arm1:',self.arm1_replay_counter,'arm2:',self.arm2_replay_counter)
-            print('max posterior in arm:', arm)
+            print('reward count. arm1:',self.arm1_replay_counter,'arm2:',self.arm2_replay_counter, flush=True)
+            print('max posterior in arm:', arm, flush=True)
             print('position:', np.around(self.linearized_position, decimals=2),
                   'bin timestamp:', self.bin_timestamp, '1st spike timestamp:', self.spike_timestamp,
                   'lfp timestamp:', self.lfp_timestamp, 
@@ -597,16 +597,16 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                   'delay spike:', np.around((self.lfp_timestamp - self.spike_timestamp) / 30, decimals=1),
                   'spike count 1:', self.spike_count_1, 'spike count 2:', self.spike_count_2, 
                   'sliding window:', self.post_sum_sliding_window,
-                  'well dist',np.around(self.center_well_dist_cm,decimals=2))
+                  'well dist',np.around(self.center_well_dist_cm,decimals=2), flush=True)
             print('target',np.around(self.target_sum_avg_1,decimals=3),
                     np.around(self.target_sum_avg_2,decimals=3),
                     'offtarget',np.around(self.offtarget_sum_avg_1,decimals=3),
-                   np.around(self.offtarget_sum_avg_2,decimals=3))
-            print('ripple tetrodes',self.ripple_tet_num_array,self.ripple_tet_num_avg)
-            print('unique tets with good spike',np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0])
+                   np.around(self.offtarget_sum_avg_2,decimals=3), flush=True)
+            print('ripple tetrodes',self.ripple_tet_num_array,self.ripple_tet_num_avg, flush=True)
+            print('unique tets with good spike',np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0], flush=True)
         elif self.config['ripple_conditioning']['session_type'] == 'run':
             print('max posterior in arm:', arm, np.around(self.norm_posterior_arm_sum[arm], decimals=2),
-                  'position:', np.around(self.linearized_position, decimals=2))
+                  'position:', np.around(self.linearized_position, decimals=2), flush=True)
             #print('unique tets with good spike',np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0])
 
         #self.shortcut_message_arm = np.argwhere(self.norm_posterior_arm_sum>self.posterior_arm_threshold)[0][0]
@@ -640,7 +640,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0]>=self.min_unique_tets):
                 # NOTE: we can now replace this with the actual shortcut message!
                 networkclient.sendStateScriptShortcutMessage(14)
-                print('replay conditoning: statescript trigger 14')
+                print('replay conditoning: statescript trigger 14', flush=True)
 
                 # old statescript message
                 # note: statescript can only execute one function at a time, so trigger function 15 and set replay_arm variable
@@ -691,7 +691,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                               self.norm_posterior_arm_sum_2[4],
                               np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0],self.center_well_dist_cm)
         else:
-            print('more than ', self.max_arm_repeats,' replays of arm', arm, 'in a row!')
+            print('more than ', self.max_arm_repeats,' replays of arm', arm, 'in a row!',flush=True)
 
     # MEC: this function brings in velocity and linearized position from decoder process
 
@@ -780,7 +780,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     pass
                 new_posterior_threshold = post_thresh_file_line
             # this allows half SD increase in ripple threshold (looks for three digits, eg 065 = 6.5 SD)
-            print('line length',len(new_posterior_threshold))
+            print('line length',len(new_posterior_threshold),'timestamp',bin_timestamp)
             if len(new_posterior_threshold) == 33:
                 self.posterior_arm_threshold = np.int(new_posterior_threshold[8:11]) / 100
                 #self.ripple_detect_velocity = np.int(new_posterior_threshold[14:17]) / 10
@@ -795,7 +795,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 print('posterior threshold:', self.posterior_arm_threshold,
                     'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
                     'rip cond', self.rip_cond_only,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
-                    'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
+                    'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist, flush=True)
 
             with open('config/taskstate.txt') as taskstate_file:
                 fd = taskstate_file.fileno()
@@ -805,7 +805,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     pass
                 taskstate = taskstate_file_line
             self.taskState = np.int(taskstate[0:1])
-            print('main taskState:',self.taskState)
+            print('main taskState:',self.taskState, flush=True)
 
         # to test shortcut message delay
         #if self.decoder_1_count % 800 == 0 and self.taskState == 2:
@@ -848,11 +848,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #self.running_post_sum_counter += 1
 
         if self.decoder_1_count % 10000 == 0:
-            print('running sum of posterior', self.decoder_1_count)
+            print('running sum of posterior', self.decoder_1_count, flush=True)
 
         if self.thresh_counter % 3000 == 0:
-            print('decoder1 delay',(self.lfp_timestamp - self.bin_timestamp_1) / 30,'count',self.decoder_1_count)
-            print('decoder2 delay',(self.lfp_timestamp - self.bin_timestamp_2) / 30,'count',self.decoder_2_count)
+            print('decoder1 delay',(self.lfp_timestamp - self.bin_timestamp_1) / 30,'count',self.decoder_1_count, flush=True)
+            print('decoder2 delay',(self.lfp_timestamp - self.bin_timestamp_2) / 30,'count',self.decoder_2_count, flush=True)
             #print('lockout time',self._lockout_time)
             #print(self.norm_posterior_arm_sum_1[self.other_arms])
 

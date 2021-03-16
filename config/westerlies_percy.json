@@ -21,7 +21,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "percy_1_21_run2",
+        "prefix": "percy_1_16_run3_playback2",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -29,7 +29,8 @@
     },
 
     "trodes": {
-        "voltage_scaling_factor": 0.195
+        "voltage_scaling_factor": 0.195,
+        "config_file": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/20210116_percy_06_r3/20210116_percy_06_r3.trodesconf"
     },
  
     "ripple_conditioning": {
@@ -124,7 +125,10 @@
             "std": 20,
             "lower": -1024,
             "upper": 1024,
-            "interval": 1
+            "interval": 1,
+            "enable_filter": 0,
+            "n_std": 1,
+            "n_marks_min": 30
         },
         "RStar_edge_length_factor": 6,
 
@@ -168,9 +172,7 @@
     },
 
     "trodes_network": {
-        "address" : "tcp://127.0.0.1",
-        "port": 49152,
         "decoding_tetrodes": [1,8, 6, 15, 18, 28, 29, 31, 34, 36, 44, 46, 47, 51, 61, 48,54,59],
-        "ripple_tetrodes": [1, 6, 15, 18, 28, 29, 31, 34, 36, 44, 46, 47, 51, 59, 62, 16]
+        "ripple_tetrodes": [1, 6, 15, 18]
     }
 }

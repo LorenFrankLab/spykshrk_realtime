@@ -363,7 +363,7 @@ class RippleFilter(rt_logging.LoggingClass):
                 # only print for one ripple process, rank 3
                 if rank == self.config['rank']['ripples'][0]:
                     print('conditioning ripple threshold = ',self.conditioning_ripple_threshold,
-                          'content ripple threshold = ',self.param.ripple_threshold)
+                          'content ripple threshold = ',self.param.ripple_threshold, flush=True)
 
             if self.session_type == 'sleep':
             #if not self.stim_enabled:

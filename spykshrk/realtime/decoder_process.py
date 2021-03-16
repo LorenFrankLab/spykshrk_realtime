@@ -876,7 +876,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #                  0, self.decoder_timestamp-self.decoder_bin_delay*self.time_bin_size)
             if self.lfp_timekeeper_counter % 1000 == 0:
                 print(self.rank,'total spikes:',self.decoded_spike_counter,
-                    'dropped spikes:',self.dropped_spikes, 'duplicated spikes:',self.duplicate_spikes)
+                    'dropped spikes:',self.dropped_spikes, 'duplicated spikes:',self.duplicate_spikes, flush=True)
                 #print('ripple tet',self.config['trodes_network']['ripple_tetrodes'][0])
                 #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
                 #print(self.decoded_spike_array[:,-1])
@@ -1191,7 +1191,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_msg_counter % 150 == 0:
                     print('position =', current_pos, ' and velocity =', np.around(self.current_vel, decimals=2),
                           'segment =', pos_data.segment,
-                          'raw_x', pos_data.x, 'raw_y', pos_data.y)
+                          'raw_x', pos_data.x, 'raw_y', pos_data.y, flush=True)
 
 
                 # read taskstate.txt for taskState - needs to be updated manually at begin of session
