@@ -514,3 +514,7 @@ class TurnOnDataStream(rt_logging.PrintableMessage):
 class BinaryRecordSendComplete(PrintableMessage):
     def __init__(self):
         pass
+
+class SetupComplete(PrintableMessage):
+    def __init__(self):
+        pass

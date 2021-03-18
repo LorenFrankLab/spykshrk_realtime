@@ -19,6 +19,7 @@ from spykshrk.realtime.realtime_base import (
     ChannelSelection, TurnOnDataStream, RippleChannelSelection,
     BinaryRecordSendComplete)
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
+from spykshrk.realtime.gui_process import GuiRippleParameterMessage
 
 
 class RippleParameterMessage(rt_logging.PrintableMessage):
@@ -344,28 +345,31 @@ class RippleFilter(rt_logging.LoggingClass):
                     print('mean -','"',self.elec_grp_id,'":',np.around(self.ripple_mean,decimals=2),',',
                     '- stdev -','"',self.elec_grp_id,'":',np.around(self.ripple_std,decimals=2),',')
 
+            #############################################################
+            # Replaced with GUI
             # open and read text file that will allow you to update ripple threshold
             # looks for three digits, 055 > 5.5 sd
             # updates ripple_thresh and normal_thresh (for content trials)
-            if self.lfp_display_counter % 15000 == 0:
-                with open('config/new_ripple_threshold.txt') as ripple_threshold_file:
-                    fd = ripple_threshold_file.fileno()
-                    fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                    # read file
-                    for rip_thresh_file_line in ripple_threshold_file:
-                        pass
-                    new_ripple_threshold = rip_thresh_file_line
+            # if self.lfp_display_counter % 15000 == 0:
+            #     with open('config/new_ripple_threshold.txt') as ripple_threshold_file:
+            #         fd = ripple_threshold_file.fileno()
+            #         fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+            #         # read file
+            #         for rip_thresh_file_line in ripple_threshold_file:
+            #             pass
+            #         new_ripple_threshold = rip_thresh_file_line
 
-                if len(new_ripple_threshold) == 33:
-                    # first three characters are ripple_thresh
-                    self.conditioning_ripple_threshold = np.int(new_ripple_threshold[0:3])/10
-                    # next three after space are normal thresh (content)
-                    self.param.ripple_threshold = np.int(new_ripple_threshold[4:7])/10
+            #     if len(new_ripple_threshold) == 33:
+            #         # first three characters are ripple_thresh
+            #         self.conditioning_ripple_threshold = np.int(new_ripple_threshold[0:3])/10
+            #         # next three after space are normal thresh (content)
+            #         self.param.ripple_threshold = np.int(new_ripple_threshold[4:7])/10
 
-                # only print for one ripple process, rank 3
-                if rank == self.config['rank']['ripples'][0]:
-                    print('conditioning ripple threshold = ',self.conditioning_ripple_threshold,
-                          'content ripple threshold = ',self.param.ripple_threshold)
+            #     # only print for one ripple process, rank 3
+            #     if rank == self.config['rank']['ripples'][0]:
+            #         print('conditioning ripple threshold = ',self.conditioning_ripple_threshold,
+            #               'content ripple threshold = ',self.param.ripple_threshold)
+            ##############################################################
 
             if self.session_type == 'sleep':
             #if not self.stim_enabled:
@@ -449,6 +453,12 @@ class RippleFilter(rt_logging.LoggingClass):
                 s['mean'] = self.ripple_mean
                 s['std'] = self.ripple_std
         return s
+
+    def update_ripple_threshold(self, thresh):
+        self.param.ripple_threshold = thresh
+
+    def update_conditioning_ripple_threshold(self, thresh):
+        self.conditioning_ripple_threshold = thresh
 
 
 class RippleMPISendInterface(realtime_base.RealtimeMPIClass):
@@ -607,6 +617,17 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
             if status_dict:
                 status_list.append(rip_filter.get_status_dict())
         return status_list
+
+    def process_gui_request_message(self, message):
+        if isinstance(message, GuiRippleParameterMessage):
+            for rip_filter in self.ripple_filters.values():
+                rip_filter.update_ripple_threshold(
+                    message.ripple_threshold)
+            for rip_filter in self.ripple_filters.values():
+                rip_filter.update_conditioning_ripple_threshold(
+                    message.conditioning_ripple_threshold)
+        else:
+            self.class_log.debug(f"Received message of unknown type {type(message)}, ignoring")
 
     def trigger_termination(self):
         self.data_interface.stop_iterator()
@@ -775,6 +796,8 @@ class RippleProcess(realtime_base.RealtimeProcess):
 
         self.mpi_recv = RippleMPIRecvInterface(self.comm, self.rank, self.config, self.rip_man)
 
+        self.gui_recv = RippleGuiRecvInterface(self.comm, self.rank, self.config, self.rip_man)
+
         self.terminate = False
         # config['trodes_network']['networkobject'].registerTerminateCallback(self.trigger_termination)
 
@@ -793,8 +816,21 @@ class RippleProcess(realtime_base.RealtimeProcess):
             while not self.terminate:
                 self.mpi_recv.__next__()
                 self.rip_man.process_next_data()
+                self.gui_recv.__next__()
 
         except StopIteration as ex:
             self.class_log.info('Terminating RippleProcess (rank: {:})'.format(self.rank))
 
         self.class_log.info("Ripple Process Main Process reached end, exiting.")
+
+class RippleGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, ripple_manager:RippleManager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.ripple_manager = ripple_manager
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.ripple_manager.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])

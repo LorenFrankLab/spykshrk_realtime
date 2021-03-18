@@ -5,12 +5,61 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QG
                                QPushButton, QLabel, QSpinBox, QSlider, QStatusBar,
                                QFileDialog, QMessageBox, QRadioButton, QTextEdit)
 from spykshrk.realtime.realtime_base import (RealtimeProcess, TerminateMessage,
-                                MPIMessageTag, TimeSyncInit)
+                                MPIMessageTag, TimeSyncInit, SetupComplete)
+from spykshrk.realtime.realtime_logging import PrintableMessage
 import logging
 import pyqtgraph as pg
 import numpy as np
 from matplotlib import cm
+import seaborn as sns
 from mpi4py import MPI
+
+DEFAULT_SEND_PARAMS = {
+    "target_arm" : 1,
+    "posterior_threshold" : 0.5,
+    "num_above_thresh" : 1,
+    "max_center_well_dist" : 1,
+    "ripple_threshold" : 3,
+    "conditioning_ripple_threshold" : 3,
+    "ripple_velocity_threshold" : 10,
+    "encoding_velocity_threshold" : 10,
+    "shortcut_message_on" : False,
+    "instructive_task" : False,
+    "reward_mode" : "replay"
+}
+
+DEFAULT_GUI_PARAMS = {
+    "colormap" : "rocket"
+}
+
+class GuiMainParameterMessage(PrintableMessage):
+    def __init__(
+        self, target_arm:int, posterior_threshold:float,
+        num_above_threshold:int, max_center_well_distance:float,
+        ripple_velocity_threshold:float, shortcut_message_on:bool,
+        instructive_task:bool, reward_mode:str):
+
+        self.target_arm = target_arm
+        self.posterior_threshold = posterior_threshold
+        self.num_above_threshold = num_above_threshold
+        self.max_center_well_distance = max_center_well_distance
+        self.ripple_velocity_threshold = ripple_velocity_threshold
+        self.shortcut_message_on = shortcut_message_on
+        self.instructive_task = instructive_task
+        self.reward_mode = reward_mode
+
+class GuiRippleParameterMessage(PrintableMessage):
+    def __init__(self, ripple_threshold:float, conditioning_ripple_threshold:float):
+        self.ripple_threshold = ripple_threshold
+        self.conditioning_ripple_threshold = conditioning_ripple_threshold
+
+class GuiEncoderParameterMessage(PrintableMessage):
+    def __init__(self, encoding_velocity_threshold:float):
+        self.encoding_velocity_threshold = encoding_velocity_threshold
+
+class GuiDecoderParameterMessage(PrintableMessage):
+    def __init__(self, encoding_velocity_threshold:float):
+        self.encoding_velocity_threshold = encoding_velocity_threshold
 
 def show_message(parent, text, *, kind=None):
     if kind is None:
@@ -47,7 +96,21 @@ class Dialog(QDialog):
         self.config = config
         self.setWindowTitle("Parameters")
 
-        self.valid_num_arms = len(config["encoder"]["arm_coords"]) - 1
+        # messages that will be sent to other processes. their state
+        # is initialized during setup and mutated when the user presses
+        # the send button
+        self.main_params = GuiMainParameterMessage(
+            None, None, None, None, None, None, None, None
+        )
+        self.ripple_params = GuiRippleParameterMessage(
+            None, None
+        )
+        self.encoder_params = GuiEncoderParameterMessage(
+            None
+        )
+        self.decoder_params = GuiDecoderParameterMessage(
+            None
+        )
 
         # Add widgets with the following convention:
         # 1. Instantiate
@@ -60,25 +123,36 @@ class Dialog(QDialog):
         self.setup_target_arm(layout)
         self.setup_post_thresh(layout)
         self.setup_n_above_threshold(layout)
-        self.setup_position_limit(layout)
         self.setup_max_center_well_distance(layout)
         self.setup_ripple_thresh(layout)
         self.setup_conditioning_ripple_thresh(layout)
-        self.setup_vel_thresh(layout)
+        self.setup_ripple_vel_thresh(layout)
+        self.setup_encoding_vel_thresh(layout)
         self.setup_shortcut_message(layout)
         self.setup_instructive_task(layout)
-        self.setup_ripple_cond_only(layout)
+        self.setup_reward_mode(layout)
+
+        self.timer = QTimer()
+        self.timer.setInterval(1000)
+        self.timer.timeout.connect(self.send_all_params)
 
     def setup_target_arm(self, layout):
         self.target_arm_label = QLabel(self.tr("Target Arm"))
         layout.addWidget(self.target_arm_label, 0, 0)
-        
+
         self.target_arm_edit = QLineEdit()
         layout.addWidget(self.target_arm_edit, 0, 1)
 
-        self.target_arm_button = QPushButton(self.tr("Send"))
+        self.target_arm_button = QPushButton(self.tr("Update"))
         self.target_arm_button.pressed.connect(self.check_target_arm)
         layout.addWidget(self.target_arm_button, 0, 2)
+
+        try:
+            value = int(self.config['ripple_conditioning']['replay_target_arm'])
+        except KeyError:
+            value = int(DEFAULT_SEND_PARAMS['target_arm'])
+        self.target_arm_edit.setText(str(value))
+        self.main_params.target_arm = value
 
     def setup_post_thresh(self, layout):
         self.post_label = QLabel(self.tr("Posterior Threshold"))
@@ -87,9 +161,16 @@ class Dialog(QDialog):
         self.post_edit = QLineEdit()
         layout.addWidget(self.post_edit, 1, 1)
 
-        self.post_thresh_button = QPushButton(self.tr("Send"))
+        self.post_thresh_button = QPushButton(self.tr("Update"))
         self.post_thresh_button.pressed.connect(self.check_post_thresh)
         layout.addWidget(self.post_thresh_button, 1, 2)
+
+        try:
+            value = float(self.config['ripple_conditioning']['posterior_sum_threshold'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['posterior_threshold'])
+        self.post_edit.setText(str(value))
+        self.main_params.posterior_threshold = value
 
     def setup_n_above_threshold(self, layout):
         self.n_above_label = QLabel(self.tr("Num. Tetrodes Above Threshold"))
@@ -98,64 +179,107 @@ class Dialog(QDialog):
         self.n_above_edit = QLineEdit()
         layout.addWidget(self.n_above_edit, 2, 1)
 
-        self.n_above_button = QPushButton(self.tr("Send"))
+        self.n_above_button = QPushButton(self.tr("Update"))
         self.n_above_button.pressed.connect(self.check_n_above)
         layout.addWidget(self.n_above_button, 2, 2)
 
-    def setup_position_limit(self, layout):
-        self.pos_limit_label = QLabel(self.tr("Position limit"))
-        layout.addWidget(self.pos_limit_label, 3, 0)
-        
-        self.pos_limit_edit = QLineEdit()
-        layout.addWidget(self.pos_limit_edit, 3, 1)
-
-        self.pos_limit_button = QPushButton(self.tr("Send"))
-        self.pos_limit_button.pressed.connect(self.check_pos_limit)
-        layout.addWidget(self.pos_limit_button, 3, 2)
+        try:
+            value = int(self.config['ripple']['RippleParameterMessage']['n_above_thresh'])
+        except KeyError:
+            value = int(DEFAULT_SEND_PARAMS['num_above_thresh'])
+        self.n_above_edit.setText(str(value))
+        self.main_params.num_above_threshold = value
 
     def setup_max_center_well_distance(self, layout):
-        self.max_center_well_label = QLabel(self.tr("Max center well distance"))
-        layout.addWidget(self.max_center_well_label, 4, 0)
+        self.max_center_well_label = QLabel(self.tr("Max Center Well Distance"))
+        layout.addWidget(self.max_center_well_label, 3, 0)
         
         self.max_center_well_edit = QLineEdit()
-        layout.addWidget(self.max_center_well_edit, 4, 1)
+        layout.addWidget(self.max_center_well_edit, 3, 1)
 
-        self.max_center_well_button = QPushButton(self.tr("Send"))
+        self.max_center_well_button = QPushButton(self.tr("Update"))
         self.max_center_well_button.pressed.connect(self.check_max_center_well)
-        layout.addWidget(self.max_center_well_button, 4, 2)
+        layout.addWidget(self.max_center_well_button, 3, 2)
+
+        try:
+            value = float(self.config['ripple_conditioning']['max_center_well_dist'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['max_center_well_dist'])
+        self.max_center_well_edit.setText(str(value))
+        self.main_params.max_center_well_distance = value
 
     def setup_ripple_thresh(self, layout):
         self.rip_thresh_label = QLabel(self.tr("Ripple Threshold"))
-        layout.addWidget(self.rip_thresh_label, 5, 0)
+        layout.addWidget(self.rip_thresh_label, 4, 0)
         
         self.rip_thresh_edit = QLineEdit()
-        layout.addWidget(self.rip_thresh_edit, 5, 1)
+        layout.addWidget(self.rip_thresh_edit, 4, 1)
 
-        self.rip_thresh_button = QPushButton(self.tr("Send"))
+        self.rip_thresh_button = QPushButton(self.tr("Update"))
         self.rip_thresh_button.pressed.connect(self.check_rip_thresh)
-        layout.addWidget(self.rip_thresh_button, 5, 2)
+        layout.addWidget(self.rip_thresh_button, 4, 2)
+
+        try:
+            value = float(self.config['ripple']['RippleParameterMessage']['ripple_threshold'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['ripple_threshold'])
+        self.rip_thresh_edit.setText(str(value))
+        self.ripple_params.ripple_threshold = value
 
     def setup_conditioning_ripple_thresh(self, layout):
         self.cond_rip_thresh_label = QLabel(self.tr("Conditioning Ripple Threshold"))
-        layout.addWidget(self.cond_rip_thresh_label, 6, 0)
+        layout.addWidget(self.cond_rip_thresh_label, 5, 0)
         
         self.cond_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self.cond_rip_thresh_edit, 6, 1)
+        layout.addWidget(self.cond_rip_thresh_edit, 5, 1)
 
-        self.cond_rip_thresh_button = QPushButton(self.tr("Send"))
+        self.cond_rip_thresh_button = QPushButton(self.tr("Update"))
         self.cond_rip_thresh_button.pressed.connect(self.check_cond_rip_thresh)
-        layout.addWidget(self.cond_rip_thresh_button, 6, 2)
+        layout.addWidget(self.cond_rip_thresh_button, 5, 2)
 
-    def setup_vel_thresh(self, layout):
-        self.vel_thresh_label = QLabel(self.tr("Velocity Threshold"))
-        layout.addWidget(self.vel_thresh_label, 7, 0)
+        try:
+            value = float(self.config['ripple_conditioning']['condition_rip_thresh'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['conditioning_ripple_threshold'])
+        self.cond_rip_thresh_edit.setText(str(value))
+        self.ripple_params.conditioning_ripple_threshold = value
+
+    def setup_ripple_vel_thresh(self, layout):
+        self.ripple_vel_thresh_label = QLabel(self.tr("Ripple Velocity Threshold"))
+        layout.addWidget(self.ripple_vel_thresh_label, 6, 0)
         
-        self.vel_thresh_edit = QLineEdit()
-        layout.addWidget(self.vel_thresh_edit, 7, 1)
+        self.ripple_vel_thresh_edit = QLineEdit()
+        layout.addWidget(self.ripple_vel_thresh_edit, 6, 1)
 
-        self.vel_thresh_button = QPushButton(self.tr("Send"))
-        self.vel_thresh_button.pressed.connect(self.check_vel_thresh)
-        layout.addWidget(self.vel_thresh_button, 7, 2)
+        self.ripple_vel_thresh_button = QPushButton(self.tr("Update"))
+        self.ripple_vel_thresh_button.pressed.connect(self.check_ripple_vel_thresh)
+        layout.addWidget(self.ripple_vel_thresh_button, 6, 2)
+
+        try:
+            value = float(self.config['ripple_conditioning']['ripple_detect_velocity'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['ripple_velocity_threshold'])
+        self.ripple_vel_thresh_edit.setText(str(value))
+        self.main_params.ripple_velocity_threshold = value
+
+    def setup_encoding_vel_thresh(self, layout):
+        self.encoding_vel_thresh_label = QLabel(self.tr("Encoding Velocity Threshold"))
+        layout.addWidget(self.encoding_vel_thresh_label, 7, 0)
+        
+        self.encoding_vel_thresh_edit = QLineEdit()
+        layout.addWidget(self.encoding_vel_thresh_edit, 7, 1)
+
+        self.encoding_vel_thresh_button = QPushButton(self.tr("Update"))
+        self.encoding_vel_thresh_button.pressed.connect(self.check_encoding_vel_thresh)
+        layout.addWidget(self.encoding_vel_thresh_button, 7, 2)
+
+        try:
+            value = float(self.config['encoder']['vel'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['encoding_velocity_threshold'])
+        self.encoding_vel_thresh_edit.setText(str(value))
+        self.encoder_params.encoding_velocity_threshold = value
+        self.decoder_params.encoding_velocity_threshold = value
 
     def setup_shortcut_message(self, layout):
         self.shortcut_label = QLabel(self.tr("Shortcut Message"))
@@ -170,9 +294,24 @@ class Dialog(QDialog):
         shortcut_group_box.setLayout(shortcut_layout)
         layout.addWidget(shortcut_group_box, 8, 1)
 
-        self.shortcut_message_button = QPushButton(self.tr("Send"))
+        self.shortcut_message_button = QPushButton(self.tr("Update"))
         self.shortcut_message_button.pressed.connect(self.check_shortcut)
         layout.addWidget(self.shortcut_message_button, 8, 2)
+
+        try:
+            if bool(self.config['ripple_conditioning']['shortcut_msg_on']):
+                self.shortcut_on.setChecked(True)
+                self.main_params.shortcut_message_on = True
+            else:
+                self.shortcut_off.setChecked(True)
+                self.main_params.shortcut_message_on = False
+        except KeyError:
+            if DEFAULT_SEND_PARAMS['shortcut_msg_on']:
+                self.shortcut_on.setChecked(True)
+                self.main_params.shortcut_message_on = True
+            else:
+                self.shortcut_off.setChecked(True)
+                self.main_params.shortcut_message_on = False
 
     def setup_instructive_task(self, layout):
         self.instructive_task_label = QLabel(self.tr("Instructive Task"))
@@ -187,49 +326,103 @@ class Dialog(QDialog):
         instructive_task_group_box.setLayout(instructive_task_layout)
         layout.addWidget(instructive_task_group_box, 9, 1)
 
-        self.instructive_task_button = QPushButton(self.tr("Send"))
+        self.instructive_task_button = QPushButton(self.tr("Update"))
         self.instructive_task_button.pressed.connect(self.check_instructive_task)
         layout.addWidget(self.instructive_task_button, 9, 2)
 
-    def setup_ripple_cond_only(self, layout):
-        self.rip_cond_only_label = QLabel(self.tr("Ripple Conditioning Only"))
-        layout.addWidget(self.rip_cond_only_label, 10, 0)
+        try:
+            if bool(self.config['ripple_conditioning']['instructive']):
+                self.instructive_task_on.setChecked(True)
+                self.main_params.instructive_task = True
+            else:
+                self.instructive_task_off.setChecked(True)
+                self.main_params.instructive_task = False
+        except KeyError:
+            if DEFAULT_SEND_PARAMS["instructive_task"]:
+                self.instructive_task_on.setChecked(True)
+                self.main_params.instructive_task = True
+            else:
+                self.instructive_task_off.setChecked(True)
+                self.main_params.instructive_task = False
+        
+        # Comment out when instructive task needed
+        self.instructive_task_on.setEnabled(False)
+        self.instructive_task_off.setEnabled(False)
+        self.instructive_task_button.setEnabled(False)
 
-        self.rip_cond_only_on = QRadioButton(self.tr("YES"))        
-        self.rip_cond_only_off = QRadioButton(self.tr("NO"))
-        rip_cond_only_layout = QHBoxLayout()
-        rip_cond_only_layout.addWidget(self.rip_cond_only_on)
-        rip_cond_only_layout.addWidget(self.rip_cond_only_off)
-        rip_cond_only_group_box = QGroupBox()
-        rip_cond_only_group_box.setLayout(rip_cond_only_layout)
-        layout.addWidget(rip_cond_only_group_box, 10, 1)
+    def setup_reward_mode(self, layout):
+        self.reward_mode_label = QLabel(self.tr("Reward Mode"))
+        layout.addWidget(self.reward_mode_label, 10, 0)
 
-        self.rip_cond_only_button = QPushButton(self.tr("Send"))
-        self.rip_cond_only_button.pressed.connect(self.check_rip_cond_only)
-        layout.addWidget(self.rip_cond_only_button, 10, 2)
+        self.reward_mode_conditioning_ripples = QRadioButton(self.tr("Conditioning ripples"))        
+        self.reward_mode_replay = QRadioButton(self.tr("Replay"))
+        reward_mode_layout = QHBoxLayout()
+        reward_mode_layout.addWidget(self.reward_mode_conditioning_ripples)
+        reward_mode_layout.addWidget(self.reward_mode_replay)
+        reward_mode_group_box = QGroupBox()
+        reward_mode_group_box.setLayout(reward_mode_layout)
+        layout.addWidget(reward_mode_group_box, 10, 1)
 
+        self.reward_mode_button = QPushButton(self.tr("Update"))
+        self.reward_mode_button.pressed.connect(self.check_reward_mode)
+        layout.addWidget(self.reward_mode_button, 10, 2)
+
+        try:
+            if self.config["reward_mode"] == "conditioning_ripples":
+                self.reward_mode_conditioning_ripples.setChecked(True)
+                self.main_params.reward_mode = "conditioning_ripples"
+            elif self.config["reward_mode"] == "replay":
+                self.reward_mode_replay.setChecked(True)
+                self.main_params.reward_mode = "replay"
+            else:
+                show_message(
+                    self,
+                    f"Invalid reward mode \"{self.config['reward_mode']}\" listed in config file. "
+                    "Setting to default 'replay'",
+                    kind="critical"
+                )
+                self.main_params.reward_mode = "replay"
+        except KeyError:
+            if DEFAULT_SEND_PARAMS['reward_mode'] == "conditioning_ripples":
+                self.reward_mode_conditioning_ripples.setChecked(True)
+                self.main_params.reward_mode = "conditioning_ripples"
+            elif DEFAULT_SEND_PARAMS['reward_mode'] == "replay":
+                self.reward_mode_replay.setChecked(True)
+                self.main_params.reward_mode = "replay"
+            else:
+                show_message(
+                    self,
+                    f"Invalid reward mode \"{DEFAULT_SEND_PARAMS['reward_mode']}\" "
+                    "listed as default parameter. Setting reward mode to replay",
+                    kind="critical"
+                )
+                self.reward_mode_conditioning_ripples.setChecked(True)
+                self.main_params.reward_mode = "replay"
+ 
     def check_target_arm(self):
 
         target_arm = self.target_arm_edit.text()
+        valid_num_arms = len(self.config["encoder"]["arm_coords"]) - 1
         try:
             target_arm = float(target_arm)
             _, rem = divmod(target_arm)
             show_error = False
             if rem != 0:
                 show_error = True
-            if target_arm not in list(range(1, self.valid_num_arms + 1)):
+            if target_arm not in list(range(1, valid_num_arms + 1)):
                 show_error = True
 
             if show_error:      
                 show_message(
                     self,
-                    f"Target arm has to be an INTEGER between 1 and {self.valid_num_arms}, inclusive",
+                    f"Target arm has to be an INTEGER between 1 and {valid_num_arms}, inclusive",
                     kind="critical")
             else:
-                # send message -- main
+                self.main_params.target_arm = int(target_arm)
+                self.send_main_params()
                 show_message(
                     self,
-                    f"Message sent - Target arm value: {int(target_arm)}",
+                    f"Updated - Target arm value: {int(target_arm)}",
                     kind="information")
         except:
             show_message(
@@ -253,7 +446,8 @@ class Dialog(QDialog):
                     "Posterior threshold must be less than 1",
                     kind="critical")
             else:
-                # send out value -- main
+                self.main_params.posterior_threshold =post_thresh
+                self.send_main_params()
                 show_message(
                     self,
                     f"Message sent - Posterior threshold value: {post_thresh}",
@@ -280,10 +474,11 @@ class Dialog(QDialog):
                 show_message(
                     self,
                     "Number of tetrodes above threshold must be an integer value "
-                    "between 1 and max_n_above, inclusive",
+                    f"between 1 and {max_n_above}, inclusive",
                     kind="critical")
             else:
-                # send message -- main
+                self.main_params.num_above_threshold = int(n_above)
+                self.send_main_params()
                 show_message(
                     self,
                     f"Message sent - n above threshold value: {n_above}",
@@ -295,54 +490,23 @@ class Dialog(QDialog):
                 "between 1 and max_n_above, inclusive",
                 kind="critical")
 
-    def check_pos_limit(self):
-        coords = np.array(self.config["encoder"]["arm_coords"])
-        min_pos = np.min(coords)
-        max_pos = np.max(coords)
-        pos_limit = self.pos_limit_edit.text()
-        try:
-            pos_limit = float(pos_limit)
-            _, rem = divmod(pos_limit)
-            show_error = False
-            if rem != 0:
-                show_error = True
-            if pos_limit not in list(range(min_pos, max_pos + 1)):
-                show_error = True
-
-            if show_error:
-                show_message(
-                    self,
-                    f"Position limit must be an integer between {min_pos} and {max_pos}, inclusive",
-                    kind="critical")
-            else:
-                # send message - main
-                show_message(
-                    self,
-                    f"Message sent - Position limit value: {pos_limit}",
-                    kind="information")
-        except:
-            show_message(
-                self,
-                f"Position limit must be an integer between {min_pos} and {max_pos}, inclusive",
-                kind="critical")
-
     def check_max_center_well(self):
         # unbounded?
         dist = self.max_center_well_edit.text()
         try:
             dist = float(dist)
             if dist < 0:
-                show_error(
+                show_message(
                     self,
                     f"Max center well distance cannot be negative",
                     kind="critical")
-                return
-
-            # send to main
-            show_message(
-                self,
-                f"Message sent - Max center well distance (cm) value: {dist}",
-                kind="information")
+            else:
+                self.main_params.max_center_well_distance = dist
+                self.send_main_params()
+                show_message(
+                    self,
+                    f"Message sent - Max center well distance (cm) value: {dist}",
+                    kind="information")
         except:
             show_message(
                 self,
@@ -358,7 +522,8 @@ class Dialog(QDialog):
                 show_message(self, "Ripple threshold cannot be negative", kind="warning")
             
             else:
-                # send message -- ripple
+                self.ripple_params.ripple_threshold = rip_thresh
+                self.send_ripple_params()
                 show_message(
                     self,
                     f"Message sent - Ripple threshold value: {rip_thresh}",
@@ -380,7 +545,8 @@ class Dialog(QDialog):
                     kind="warning")
             
             else:
-                # send message -- ripple
+                self.ripple_params.conditioning_ripple_threshold = cond_rip_thresh
+                self.send_ripple_params()
                 show_message(
                     self,
                     f"Message sent - Conditioning ripple threshold value: {cond_rip_thresh}",
@@ -391,26 +557,52 @@ class Dialog(QDialog):
                 "Conditioning ripple threshold must be a non-negative number",
                 kind="critical")
     
-    def check_vel_thresh(self):
+    def check_ripple_vel_thresh(self):
         
-        vel_thresh = self.vel_thresh_edit.text()
+        ripple_vel_thresh = self.ripple_vel_thresh_edit.text()
         try:
-            vel_thresh = float(vel_thresh)
-            if vel_thresh < 0:
+            ripple_vel_thresh = float(ripple_vel_thresh)
+            if ripple_vel_thresh < 0:
                 show_message(
                     self,
-                    "Velocity threshold cannot be a negative number",
+                    "Ripple velocity threshold cannot be a negative number",
                     kind="critical")
             else:
-                # send out message -- main, encoder, decoder
+                self.main_params.ripple_velocity_threshold = ripple_vel_thresh
+                self.send_main_params()
                 show_message(
                     self,
-                    f"Message sent - Velocity threshold value: {vel_thresh}",
+                    f"Message sent - Ripple velocity threshold value: {vel_thresh}",
                     kind="information")
         except:
             show_message(
                 self,
-                "Velocity threshold must be a non-negative number",
+                "Ripple velocity threshold must be a non-negative number",
+                kind="critical")
+
+    def check_encoding_vel_thresh(self):
+        
+        encoding_vel_thresh = self.encoding_vel_thresh_edit.text()
+        try:
+            encoding_vel_thresh = float(encoding_vel_thresh)
+            if encoding_vel_thresh < 0:
+                show_message(
+                    self,
+                    "Encoding velocity threshold cannot be a negative number",
+                    kind="critical")
+            else:
+                self.encoder_params.encoding_velocity_threshold = encoding_vel_thresh
+                self.decoder_params.encoding_velocity_threshold = encoding_vel_thresh
+                self.send_encoder_params()
+                self.send_decoder_params()
+                show_message(
+                    self,
+                    f"Message sent - Encoding velocity threshold value: {vel_thresh}",
+                    kind="information")
+        except:
+            show_message(
+                self,
+                "Encoding velocity threshold must be a non-negative number",
                 kind="critical")
 
     def check_shortcut(self):
@@ -419,13 +611,15 @@ class Dialog(QDialog):
         shortcut_off_checked = self.shortcut_off.isChecked()
         if shortcut_on_checked or shortcut_off_checked:
             if shortcut_on_checked:
-                # send message -- main
+                self.main_params.shortcut_message_on = True
+                self.send_main_params()
                 show_message(
                     self,
                     "Message sent - Set shortcut ON",
                     kind="information")
             else:
-                # send message -- main
+                self.main_params.shortcut_message_on = False
+                self.send_main_params()
                 show_message(
                     self,
                     "Message sent - Set shortcut OFF",
@@ -443,14 +637,18 @@ class Dialog(QDialog):
         instructive_task_off = self.instructive_task_off.isChecked()
         if instructive_task_on or instructive_task_off:
             if instructive_task_on:
+                self.main_params.instructive_task = True
+                self.send_main_params()
                 show_message(
                     self,
-                    "Instructive task is currently not being used",
+                    "Instructive task is currently not being used. Doing nothing.",
                     kind="information")
             else:
+                self.main_params.instructive_task = False
+                self.send_main_params()
                 show_message(
                     self,
-                    "Instructive task is currently not being used",
+                    "Instructive task is currently not being used. Doing nothing.",
                     kind="information")
         else:
             show_message(
@@ -458,27 +656,53 @@ class Dialog(QDialog):
                 "Neither button is selected. Doing nothing.",
                 kind="information")
 
-    def check_rip_cond_only(self):
-        rip_cond_only_on_checked = self.rip_cond_only_on.isChecked()
-        rip_cond_only_off_checked = self.rip_cond_only_off.isChecked()
-        if rip_cond_only_on_checked or rip_cond_only_off_checked:
-            if rip_cond_only_on_checked:
-                # send message -- main (bool)
+    def check_reward_mode(self):
+        reward_mode_conditioning_ripples = self.reward_mode_conditioning_ripples.isChecked()
+        reward_mode_replay = self.reward_mode_replay.isChecked()
+        if reward_mode_conditioning_ripples or reward_mode_replay:
+            if reward_mode_conditioning_ripples:
+                self.main_params.reward_mode = "conditioning_ripples"
+                self.send_main_params()
                 show_message(
                     self,
-                    "Message sent - Set ripple conditioning only to YES",
+                    "Message sent - Set reward mode to conditioning ripples",
                     kind="information")
             else:
-                # send message -- main (bool)
+                self.main_params.reward_mode = "replay"
+                self.send_main_params()
                 show_message(
                     self,
-                    "Message sent - Set ripple conditioning only to NO",
+                    "Message sent - Set reward mode to replay",
                     kind="information")
         else:
             show_message(
                 self,
                 "Neither button is selected. Doing nothing.",
                 kind="information")
+
+    def send_main_params(self):
+        self.comm.send(self.main_params, dest=self.config['rank']['supervisor'])
+
+    def send_ripple_params(self):
+        for rank in self.config['rank']['ripples']:
+            self.comm.send(self.ripple_params, dest=rank)
+    
+    def send_encoder_params(self):
+        for rank in self.config['rank']['encoders']:
+            self.comm.send(self.encoder_params, dest=rank)
+
+    def send_decoder_params(self):
+        for rank in self.config['rank']['decoder']:
+            self.comm.send(self.decoder_params, dest=rank)
+
+    def send_all_params(self):
+        self.send_main_params()
+        self.send_ripple_params()
+        self.send_encoder_params()
+        self.send_decoder_params()
+
+    def run(self):
+        self.timer.start()
 
     def closeEvent(self, event):
         show_message(
@@ -532,7 +756,9 @@ class DecodingResultsWindow(QMainWindow):
 
         # plot decoder lines
         for ii in range(num_plots):
-            self.plots[ii] = self.graphics_widget.addPlot(ii, 0, 1, 1)
+            self.plots[ii] = self.graphics_widget.addPlot(
+                ii, 0, 1, 1,
+                labels={'left':'Position bin', 'bottom':'Time (sec)'})
             coords = self.config["encoder"]["arm_coords"]
             for lb, ub in coords:
                 self.plot_datas[ii].append(
@@ -543,19 +769,24 @@ class DecodingResultsWindow(QMainWindow):
                 self.plots[ii].addItem(self.plot_datas[ii][-1])
                 self.plot_datas[ii].append(
                     pg.PlotDataItem(
-                        np.ones(self.num_time_bins) * ub, pen='w', width=10
+                        np.ones(self.num_time_bins) * (ub+1), pen='w', width=10
                     )
                 )
                 self.plots[ii].addItem(self.plot_datas[ii][-1])
-            self.images[ii] = pg.ImageItem(border=None)
-
-            colormap = cm.get_cmap("Spectral_r") # allow setting in config
-            colormap._init()
-            lut = (colormap._lut * 255).view(np.ndarray)
             
-            self.images[ii].setLookupTable(lut)
+            # scale axes to time coordinates - make this user settable
+            # rework this later to be more flexible
+            x_axis = self.plots[ii].getAxis("bottom")
+            ticks = np.linspace(0, N, 5)
+            tick_labels = [str(np.round(tick*0.006, decimals=2)) for tick in ticks]
+            x_axis.setTicks([[ (tick, tick_label) for (tick, tick_label) in zip(ticks, tick_labels)]])
+            
+            self.plots[ii].setMenuEnabled(False)
+            self.images[ii] = pg.ImageItem(border=None)
             self.images[ii].setZValue(-100)
-            self.plots[ii].addItem(self.images[ii])
+            self.plots[ii].addItem(self.images[ii])     
+        
+        self.init_colormap()
 
         self.req_cmd = self.comm.irecv(
             source=self.config["rank"]["supervisor"],
@@ -567,6 +798,28 @@ class DecodingResultsWindow(QMainWindow):
         self.mpi_status = MPI.Status()
 
         self.ok_to_terminate = False
+
+    def init_colormap(self):
+        cmap = sns.color_palette(DEFAULT_GUI_PARAMS["colormap"], as_cmap=True)
+        try:
+            colormap = self.config["gui"]["colormap"]
+            try:
+                cmap = sns.color_palette(colormap, as_cmap=True)
+            except:
+                show_message(
+                    self,
+                    f"Colormap {colormap} could not be found, using default",
+                    kind="information")
+        except KeyError:
+            pass
+
+        cmap._init()
+        lut = (cmap._lut * 255).view(np.ndarray)
+
+        for image in self.images:
+            image.setLookupTable(lut)
+            x, y = self.posterior_datas[0].shape
+            image.setImage(np.random.rand(x, y).T)
 
     def show_all(self):
         self.show()
@@ -594,7 +847,14 @@ class DecodingResultsWindow(QMainWindow):
             self.update_data()
 
     def process_command(self, message):
-        if isinstance(message, TerminateMessage):
+        if isinstance(message, SetupComplete):
+            show_message(
+                self,
+                "All processes have finished setup. After closing this popup, "
+                "hit record or play to start decoding.",
+                kind="information"
+            )
+        elif isinstance(message, TerminateMessage):
             self.ok_to_terminate = True
             show_message(
                 self,
@@ -627,6 +887,7 @@ class DecodingResultsWindow(QMainWindow):
     def run(self):
         self.elapsed_timer.start()
         self.timer.start()
+        self.parameters_dialog.run()
 
     def closeEvent(self, event):
         if not self.ok_to_terminate:

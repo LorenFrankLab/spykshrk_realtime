@@ -14,6 +14,7 @@ from spykshrk.realtime.realtime_base import ChannelSelection, TurnOnDataStream, 
 from spykshrk.realtime.tetrode_models import kernel_encoder
 import spykshrk.realtime.rst.RSTPython as RST
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
+from spykshrk.realtime.gui_process import GuiEncoderParameterMessage
 
 #timer to send uniform intensity function every deocder time bin if a decoded spike was not sent
 class NoSpikeTimerThread(Thread):
@@ -197,6 +198,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.current_vel = 0
         self.smooth_x = 0
         self.smooth_y = 0
+        self.velocity_threshold = self.config['encoder']['vel']
 
         #initialize variables to record if a spike has been sent to decoder
         self.spike_sent = 3
@@ -359,7 +361,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                             self.decoder_number = self.config['rank']['decoder'][1]
 
                         # record if this is an encoding spike
-                        if abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1:
+                        if abs(self.current_vel) >= self.velocity_threshold and self.taskState == 1:
                             self.encoding_spike = 1
                         else:
                             self.encoding_spike = 0
@@ -411,7 +413,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     # added switch from config file: taskState == 1 (only add spikes if in first cued trials)
                     # can also add a secondary spike amplitude filter here
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
-                    if (abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1
+                    if (abs(self.current_vel) >= self.velocity_threshold and self.taskState == 1
                         and not self.config['ripple_conditioning']['load_encoding']):
                         if self.spk_counter % 1000 == 0:
                             print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
@@ -491,6 +493,12 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_counter % 1000 == 0:
                     self.class_log.info('Received {} pos datapoints.'.format(self.pos_counter))
                 pass
+    
+    def process_gui_request_message(self, message):
+        if isinstance(message, GuiEncoderParameterMessage):
+            self.velocity_threshold = message.encoding_velocity_threshold
+        else:
+            self.class_log.debug(f"Received message of unknown type {type(message)}, ignoring")
 
 
 class EncoderMPIRecvInterface(realtime_base.RealtimeMPIClass):
@@ -616,3 +624,15 @@ class EncoderProcess(realtime_base.RealtimeProcess):
 
         self.enc_man.stopFlag.set()
         self.class_log.info("Encoding Process reached end, exiting.")
+
+class EncoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, encoder_manager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.encoder_manager = encoder_manager
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.encoder_manager.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])

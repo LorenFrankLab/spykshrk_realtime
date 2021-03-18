@@ -19,6 +19,7 @@ from spykshrk.realtime.camera_process import (LinearPositionAssignment,
 from spykshrk.realtime.simulator import simulator_process
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 from spykshrk.realtime.realtime_base import BinaryRecordSendComplete, MPIMessageTag
+from spykshrk.realtime.gui_process import GuiDecoderParameterMessage
 
 
 class PosteriorSum(rt_logging.PrintableMessage):
@@ -258,6 +259,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.total_decoded_spike_count = 0
         self.pos_counter = 0
         self.current_vel = 0
+        self.velocity_threshold = self.config['encoder']['vel']
 
         self._ripple_thresh_states = {}
 
@@ -477,7 +479,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
     # should we multiply by prob_no_spike for each tetrode with a spike??
     def add_observation(self, spk_elec_grp_id, spk_pos_hist, vel_data, taskState):
         self.taskState = taskState
-        if abs(vel_data) >= self.config['encoder']['vel'] and self.taskState == 1:
+        if abs(vel_data) >= self.velocity_threshold and self.taskState == 1:
             #print('firing rate vel thresh',vel_data,'tetrode',spk_elec_grp_id)
             self.firing_rate[spk_elec_grp_id][self.cur_pos_ind] += 1
 
@@ -519,7 +521,7 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         #print('current position',self.cur_pos)
         #print('pos index added to occupancy',self.cur_pos_ind)
 
-        if (abs(self.cur_vel) >= self.config['encoder']['vel'] and self.taskState == 1
+        if (abs(self.cur_vel) >= self.velocity_threshold and self.taskState == 1
             and not self.config['ripple_conditioning']['load_encoding']):
             # MEC test: add all positions to occupancy to compare to offline
             # if abs(self.cur_vel) >= 0:
@@ -700,6 +702,9 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         # print('posterior',posterior)
 
         return self.posterior_sum_result
+
+    def update_velocity_threshold(self, thresh):
+        self.velocity_threshold = thresh
 
 
 class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
@@ -1230,6 +1235,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 pass
 
+    def process_gui_request_message(self, message):
+        if isinstance(message, GuiDecoderParameterMessage):
+            self.pp_decoder.update_velocity_threshold(message.encoding_velocity_threshold)
+        else:
+            self.class_log.debug(f"Received message of unknown type {type(message)}, ignoring")
+
 
 class BayesianDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
     def __init__(self, rank, config, local_rec_manager, send_interface: DecoderMPISendInterface,
@@ -1414,6 +1425,8 @@ class DecoderProcess(realtime_base.RealtimeProcess):
         self.mpi_recv = DecoderRecvInterface(
             comm=comm, rank=rank, config=config, decode_manager=self.dec_man)
 
+        self.gui_recv = DecoderGuiRecvInterface(comm, rank, config, self.dec_man)
+
         # First Barrier to finish setting up nodes
 
         self.class_log.debug("First Barrier")
@@ -1441,6 +1454,7 @@ class DecoderProcess(realtime_base.RealtimeProcess):
                 #    self.record_timing(timestamp=self.main_loop_counter, elec_grp_id=1,
                 #                   datatype=datatypes.Datatypes.SPIKES, label='dec_loop_2')                    
                 self.mpi_recv.__next__()
+                self.gui_recv.__next__()
 
         except StopIteration as ex:
             self.class_log.info(
@@ -1448,3 +1462,15 @@ class DecoderProcess(realtime_base.RealtimeProcess):
 
         # can try to save firing rate dict to a json file here
         self.class_log.info("Decoding Process reached end, exiting.")
+
+class DecoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, pp_manager:PPDecodeManager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.pp_manager = pp_manager
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.pp_manager.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])

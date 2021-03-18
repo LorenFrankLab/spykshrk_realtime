@@ -14,6 +14,7 @@ import spykshrk.realtime.realtime_logging as rt_logging
 import spykshrk.realtime.ripple_process as ripple_process
 import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
+from spykshrk.realtime.gui_process import GuiMainParameterMessage
 from mpi4py import MPI
 
 from trodesnetwork.trodes import TrodesAcquisitionSubscriber, TrodesHardware
@@ -184,6 +185,8 @@ class MainProcess(realtime_base.RealtimeProcess):
         self.recv_interface = MainSimulatorMPIRecvInterface(comm=comm, rank=rank,
                                                             config=config, main_manager=self.manager)
 
+        self.gui_recv = MainGuiRecvInterface(comm, rank, config, self.stim_decider)
+
         self.terminate = False
 
         self.mpi_status = MPI.Status()
@@ -222,6 +225,7 @@ class MainProcess(realtime_base.RealtimeProcess):
                 self.vel_pos_recv_interface.__next__()
                 self.posterior_recv_interface.__next__()
                 self.networkclient.__next__()
+                self.gui_recv.__next__()
 
                 # hacky way to start other processes once sufficient time has passed
                 # to receive binary record messages
@@ -229,7 +233,8 @@ class MainProcess(realtime_base.RealtimeProcess):
                     print("***************************************", flush=True)
                     print("   All ranks are set up, ok to start   ", flush=True)
                     print("***************************************", flush=True)
-                    # x = input("All ranks are set up, press any key + ENTER to continue:")
+                    self.send_interface.send_setup_complete()
+                    self.class_log.debug("Notified GUI that setup was complete")
                     check_user_input = False
                     # self.networkclient.start()
 
@@ -404,9 +409,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.max_arm_repeats = 1
         # marker for stim_message to note end of ripple (message sent or end of lockout)
         self.ripple_end = False
-        # to send a shortcut message with every ripple
-        self.rip_cond_only = self.config['ripple_conditioning']['posterior_sum_rip_only']
-        self.shortcut_msg_on = 0
+        self.shortcut_msg_on = False
+        
+        # # to send a shortcut message with every ripple
+        # self.rip_cond_only = self.config['ripple_conditioning']['posterior_sum_rip_only']
+        # renamed to self.reward_mode
+        self.reward_mode = self.config['reward_mode']
 
         # for behavior: 1 sec lockout between shortcut messages
         self._trodes_message_lockout_timestamp = 0
@@ -559,7 +567,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             # detect ripples 
             if ((num_above >= self._ripple_n_above_thresh) and not self._in_ripple_lockout):
-                if self.velocity < 10:
+                if self.velocity < self.ripple_detect_velocity:
                     print('detection of ripple. timestamp',self.bin_timestamp_1, 
                     'ripple num:',self._ripple_lockout_count)
 
@@ -573,6 +581,23 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                   num_above, 0, self.spike_count)
 
         return num_above
+
+    def process_gui_request_message(self, message):
+        if isinstance(message, GuiMainParameterMessage):
+            self.replay_target_arm = message.target_arm
+            self.posterior_arm_threshold = message.posterior_threshold
+            self.update_n_threshold(message.num_above_threshold)
+            self.max_center_well_dist = message.max_center_well_distance
+            self.ripple_detect_velocity = message.ripple_velocity_threshold
+            self.shortcut_msg_on = message.shortcut_message_on
+            self.instructive = message.instructive_task
+            self.reward_mode = message.reward_mode
+            print('posterior threshold:', self.posterior_arm_threshold,
+                'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
+                'reward mode', self.reward_mode,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
+                'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
+        else:
+            self.class_log.info(f"Received message of unknown type {type(message)}, ignoring")
 
     # sends statescript message at end of replay
     def posterior_sum_statescript_message(self, arm, networkclient):
@@ -630,7 +655,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             # was lfp_timestamp, now bin_timestamp_1
             if (self.taskState == 2 and self.shortcut_message_arm == self.replay_target_arm and
                 (self.bin_timestamp_1 > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
-                and not self.rip_cond_only and self.shortcut_msg_on and not self.instructive and 
+                and self.reward_mode == "replay" and self.shortcut_msg_on and not self.instructive and 
                 self.center_well_proximity and 
                 np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0]>=self.min_unique_tets):
                 # NOTE: we can now replace this with the actual shortcut message!
@@ -767,30 +792,34 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         if self.decoder_1_count % 200 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
             # if self.vel_pos_counter % 1000 == 0:
             #print('thresh_counter: ',self.thresh_counter)
-            with open('config/new_ripple_threshold.txt') as posterior_threshold_file:
-                fd = posterior_threshold_file.fileno()
-                fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                # read file
-                for post_thresh_file_line in posterior_threshold_file:
-                    pass
-                new_posterior_threshold = post_thresh_file_line
-            # this allows half SD increase in ripple threshold (looks for three digits, eg 065 = 6.5 SD)
-            print('line length',len(new_posterior_threshold))
-            if len(new_posterior_threshold) == 33:
-                self.posterior_arm_threshold = np.int(new_posterior_threshold[8:11]) / 100
-                #self.ripple_detect_velocity = np.int(new_posterior_threshold[14:17]) / 10
-                #self.second_post_sum_thresh = np.int(new_posterior_threshold[14:17]) / 100
-                self.rip_cond_only = np.int(new_posterior_threshold[18:19])
-                self.shortcut_msg_on = np.int(new_posterior_threshold[20:21])
-                self._ripple_n_above_thresh = np.int(new_posterior_threshold[22:23])
-                # insert conditional so replay target arm only used if not instructive
-                #self.replay_target_arm = np.int(new_posterior_threshold[24:25])
-                self.position_limit = np.int(new_posterior_threshold[26:28])
-                self.max_center_well_dist = np.int(new_posterior_threshold[29:32])
-                print('posterior threshold:', self.posterior_arm_threshold,
-                    'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
-                    'rip cond', self.rip_cond_only,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
-                    'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
+
+            ##############################################################
+            # Replaced with GUI
+            # with open('config/new_ripple_threshold.txt') as posterior_threshold_file:
+            #     fd = posterior_threshold_file.fileno()
+            #     fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+            #     # read file
+            #     for post_thresh_file_line in posterior_threshold_file:
+            #         pass
+            #     new_posterior_threshold = post_thresh_file_line
+            # # this allows half SD increase in ripple threshold (looks for three digits, eg 065 = 6.5 SD)
+            # print('line length',len(new_posterior_threshold))
+            # if len(new_posterior_threshold) == 33:
+            #     self.posterior_arm_threshold = np.int(new_posterior_threshold[8:11]) / 100
+            #     #self.ripple_detect_velocity = np.int(new_posterior_threshold[14:17]) / 10
+            #     #self.second_post_sum_thresh = np.int(new_posterior_threshold[14:17]) / 100
+            #     self.rip_cond_only = np.int(new_posterior_threshold[18:19])
+            #     self.shortcut_msg_on = np.int(new_posterior_threshold[20:21])
+            #     self._ripple_n_above_thresh = np.int(new_posterior_threshold[22:23])
+            #     # insert conditional so replay target arm only used if not instructive
+            #     #self.replay_target_arm = np.int(new_posterior_threshold[24:25])
+            #     self.position_limit = np.int(new_posterior_threshold[26:28])
+            #     self.max_center_well_dist = np.int(new_posterior_threshold[29:32])
+            #     print('posterior threshold:', self.posterior_arm_threshold,
+            #         'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
+            #         'rip cond', self.rip_cond_only,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
+            #         'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
+            ##############################################################
 
             with open('config/taskstate.txt') as taskstate_file:
                 fd = taskstate_file.fileno()
@@ -1276,6 +1305,11 @@ class MainMPISendInterface(realtime_base.RealtimeMPIClass):
             self.comm.send(obj=realtime_base.TerminateMessage(), dest=rank,
                            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
 
+    def send_setup_complete(self):
+        self.comm.send(obj=realtime_base.SetupComplete(),
+                       dest=self.config['rank']['gui'],
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
 
 class MainSimulatorManager(rt_logging.LoggingClass):
 
@@ -1554,3 +1588,15 @@ class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):
 
         elif isinstance(message, realtime_base.BinaryRecordSendComplete):
             self.main_manager.update_all_rank_setup_status(self.mpi_status.source)
+
+class MainGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, stim_decider:StimDecider):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.stim_decider = stim_decider
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.stim_decider.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
