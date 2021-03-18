@@ -30,7 +30,7 @@ def binrec_to_pandas(binrec: bin_rec_cy.BinaryRecordsFileReader):
     binrec.start_record_reading()
     panda_dict = binrec.convert_pandas()
 
-    hdf5_temp_filename = os.path.join('/tmp', str(uuid.uuid4()) + '.h5')
+    hdf5_temp_filename = binrec._file_path + '.tmp.h5'
     with pd.HDFStore(hdf5_temp_filename, 'w') as hdf5_store:
         filename_dict = {}
         for rec_id, df in panda_dict.items():
@@ -120,7 +120,7 @@ def main(argv):
     end_time = time.time()
     logging.info("Done converting record files into dataframes"
                  ", took {:.01f} seconds ({:.02f} minutes).".format(end_time - start_time,
-                                                                    (end_time - start_time)/60.))
+                                                                   (end_time - start_time)/60.))
 
     remapped_dict = {}
     for rec_files in file_list:
@@ -141,6 +141,14 @@ def main(argv):
     logging.info("Done merging and sorting and saving all records,"
                  " {:.01f} seconds ({:.02f} minutes).".format(end_time - start_time,
                                                               (end_time - start_time)/60.))
+
+    logging.info("Deleting temporary files")
+    for rec_files in file_list:
+        for rec_id, filename in rec_files.items():
+            try:
+                os.remove(filename)
+            except FileNotFoundError:
+                pass
 
     logging.info("RSyncing hdf5, pstat, and config file to backup location.")
     start_time = time.time()
