@@ -101,10 +101,10 @@ class MainProcessClient(object):
             data = self.acq_sub.receive(noblock=True)
 
             # only start up once
-            if data['command'] == 'play' and not self.started:
+            if ('play' in data['command'] or 'record' in data['command']) and not self.started:
                 self.manager.start()
                 self.started = True
-            if data['command'] == 'stop':
+            if 'stop' in data['command']: # 'stop' for playback, 'stoprecord' for recording
                 self.manager.trigger_termination()
         except ZMQError:
             pass
