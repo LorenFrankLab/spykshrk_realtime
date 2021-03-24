@@ -29,16 +29,7 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
             raise TypeError(f"Invalid datatype {datatype}")
         super().__init__(comm, rank, config, datatype)
 
-        address = self.config["trodes_network"]["address"]
-        port = self.config["trodes_network"]["port"]
-        server_address = address + ":" + str(port)
-        
-        if self.datatype == Datatypes.LFP:
-            self.sub_obj = SourceSubscriber('source.lfp', server_address=server_address)
-        elif self.datatype == Datatypes.SPIKES:
-            self.sub_obj = SourceSubscriber('source.waveforms', server_address=server_address)
-        else:
-            self.sub_obj = SourceSubscriber('source.position', server_address=server_address)
+        self.sub_obj = None
         
         self.start = False
         self.stop = False
@@ -131,6 +122,17 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
             f"Set up to stream from ntrode ids {self.ntrode_ids}")
 
     def start_all_streams(self):
+        address = self.config["trodes_network"]["address"]
+        port = self.config["trodes_network"]["port"]
+        server_address = address + ":" + str(port)
+        
+        if self.datatype == Datatypes.LFP:
+            self.sub_obj = SourceSubscriber('source.lfp', server_address=server_address)
+        elif self.datatype == Datatypes.SPIKES:
+            self.sub_obj = SourceSubscriber('source.waveforms', server_address=server_address)
+        else:
+            self.sub_obj = SourceSubscriber('source.position', server_address=server_address)
+        
         self.start = True
         self.class_log.debug("Datastream activated")
 
