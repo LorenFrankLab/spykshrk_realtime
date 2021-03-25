@@ -14,7 +14,7 @@ import spykshrk.realtime.simulator.sim_databuffer as sim_databuffer
 from spykshrk.realtime import binary_record
 import spykshrk.realtime.timing_system as timing_system
 
-from spikegadgets import trodesnetwork as tnp
+#from spikegadgets import trodesnetwork as tnp
 
 class SimulatorError(RuntimeError):
     pass

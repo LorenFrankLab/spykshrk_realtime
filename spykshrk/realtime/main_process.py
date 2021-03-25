@@ -832,13 +832,14 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             print('main taskState:',self.taskState)
 
         # to test shortcut message delay
-        #if self.decoder_1_count % 800 == 0 and self.taskState == 2:
+        #if self.decoder_1_count % 800 == 0 and self.taskState == 1:
         #    print('TESTING! bin timestamp:', self.bin_timestamp, '1st spike timestamp:', self.spike_timestamp,
         #          'lfp timestamp:', self.lfp_timestamp, 
         #          'delay bin:', np.around((self.lfp_timestamp - self.bin_timestamp_1) / 30, decimals=1),
         #          'delay spike:', np.around((self.lfp_timestamp - self.spike_timestamp) / 30, decimals=1))            
-        #    networkclient.sendStateScriptShortcutMessage(14)
-        #    print('TESTING: statescript trigger 14')            
+        #    #networkclient.sendStateScriptShortcutMessage(14)
+        #    networkclient.send_statescript_shortcut_message(14)
+        #    print('TESTING: statescript trigger 14', flush=True)            
 
 
         # not currently using this - might use in future
