@@ -292,7 +292,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                          send_interface=send_interface,
                          rec_ids=[realtime_base.RecordIDs.STIM_STATE,
                                   realtime_base.RecordIDs.STIM_LOCKOUT,
-                                  realtime_base.RecordIDs.STIM_MESSAGE],
+                                  realtime_base.RecordIDs.STIM_MESSAGE,
+                                  realtime_base.RecordIDs.STIM_HEAD_DIRECTION],
                          rec_labels=[['timestamp', 'elec_grp_id', 'threshold_state'],
                                      ['timestamp', 'velocity', 'lockout_num', 'lockout_state', 'tets_above_thresh',
                                       'big_rip_message_sent','spike_count'],
@@ -305,10 +306,16 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                       'spike_count_1','spike_count_2','ripple_tets',
                                       'box_1', 'arm1_1', 'arm2_1', 'arm3_1', 'arm4_1', 
                                       'box_2', 'arm1_2', 'arm2_2', 'arm3_2','arm4_2',
-                                      'unique_tets','center_well_dist']],
+                                      'unique_tets','center_well_dist'],
+                                      ['timestamp', 'well', 'raw_x', 'raw_y', 'raw_x2', 'raw_y2',
+                                       'angle', 'angle_well_1', 'angle_well_2',
+                                       'to_well_angle_range', 'within_angle_range',
+                                       'distance_from_center_well', 'max_distance_from_center_well',
+                                       'duration', 'lockout_time']],
                          rec_formats=['Iii',
                                       'Idiiddi',
-                                      'IIidiiidddidiididiidddddddddddddddddid'])
+                                      'IIidiiidddidiididiidddddddddddddddddid',
+                                      'IHhhhhddddddddd'])
         # NOTE: for binary files: I,i means integer, d means decimal
 
         self.rank = rank
@@ -488,10 +495,27 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.pos_bins = np.arange(0, self.max_pos, 1)
         self.pos_trajectory = np.zeros((1,self.max_pos))
 
+        # head direction params
+        # only an approximation since camera module timestamps do not come in at
+        # regularly spaced time intervals (although we assume the acquisition of
+        # frames is more or less at a constant frame rate)
+        div, rem = divmod(
+            self.config['camera']['frame_rate'] * self.config['head_direction']['min_duration'],
+            1)
+        if rem:
+            div += 1
+        self.angle_buffer = [None] * div
+        self.min_duration_head_angle = self.config['head_direction']['min_duration']
+        self.to_well_angle_range = self.config['head_direction']['well_angle_range']
+        self.within_angle_range = self.config['head_direction']['within_angle_range']
+        self.max_center_well_dist_head = self.config['head_direction']['max_center_well_dist']
+        self.head_direction_lockout_time = self.config['head_direction']['lockout_time']
+        self.head_direction_stim_time = 0
+
         # if self.config['datasource'] == 'trodes':
         #    self.networkclient = MainProcessClient("SpykshrkMainProc", config['trodes_network']['address'],config['trodes_network']['port'], self.config)
         # self.networkclient.initializeHardwareConnection()
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
 
         # Setup bin rec file
         # main_manager.rec_manager.register_rec_type_message(rec_type_message=self.get_record_register_message())
@@ -529,7 +553,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
             self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
                                datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
 
         # record timestamp from ripple node
         if elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]:
@@ -560,7 +584,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                             self._ripple_lockout_time):
                 self._in_ripple_lockout = False
                 self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-                                  self.bin_timestamp_1, time, self._ripple_lockout_count, 
+                                  self.bin_timestamp_1, mpi_time, self._ripple_lockout_count, 
                                   self._in_ripple_lockout, num_above, 0, self.spike_count)
                 #print('ripple end. ripple num:',self._ripple_lockout_count,'timestamp',self.bin_timestamp_1)
                 self._ripple_lockout_count += 1
@@ -603,7 +627,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
     def posterior_sum_statescript_message(self, arm, networkclient):
         arm = arm
         networkclient = networkclient
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
 
         #remove posterior_time_bin from printing b/c we arent using it now
 
@@ -695,7 +719,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             self.ripple_end = True
             self.write_record(realtime_base.RecordIDs.STIM_MESSAGE,
-                              self.bin_timestamp, self.spike_timestamp, self.lfp_timestamp, time, self.shortcut_message_sent,
+                              self.bin_timestamp, self.spike_timestamp, self.lfp_timestamp, mpi_time, self.shortcut_message_sent,
                               self._lockout_count, self.posterior_time_bin,
                               (self.lfp_timestamp - self.bin_timestamp) / 30, self.velocity,self.linearized_position,
                               self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
@@ -715,7 +739,10 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     # MEC: this function brings in velocity and linearized position from decoder process
 
-    def velocity_position(self, bin_timestamp, raw_x, raw_y, pos, vel, pos_dec_rank):
+    def velocity_position(
+        self, bin_timestamp, raw_x, raw_y, raw_x2, raw_y2, angle, angle_well_1, angle_well_2,
+        pos, vel, pos_dec_rank, networkclient):
+        
         self.velocity = vel
         self.linearized_position = pos
         self.raw_x = raw_x
@@ -731,10 +758,53 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             pass
         #print('main pos/vel data',self.linearized_position,self.velocity,self.raw_x,self.raw_y)
 
+        if time.time() - self.head_direction_stim_time < self.head_direction_lockout_time:
+            return
+        
+        self.angle_buffer[1:] = self.angle_buffer[:-1]
+        self.angle_buffer[0] = angle
+        if None in self.angle_buffer: # not enough data yet, don't reward
+            return
+        is_within_angle_range = (
+            abs(max(self.angle_buffer) - min(self.angle_buffer)) <= self.within_angle_range)
+        
+        x = (raw_x + raw_x2) / 2
+        y = (raw_y + raw_y2) / 2
+        dist = np.sqrt( (x - self.center_well_pos[0])**2 + (y - self.center_well_pos[1])**2 )
+        is_in_center_well_proximity = dist <= self.max_center_well_dist_head
+
+        record_head_direction_stim = False
+        
+        # this will only work if the angles to the wells +/- the acceptable angle range
+        # do not overlap! otherwise we could end up with a situation where the animal's
+        # head direction is detected to be pointing to multiple wells
+        if (is_within_angle_range and is_in_center_well_proximity and
+            abs(angle - angle_well_1) <= self.to_well_angle_range):
+            
+            networkclient.send_statescript_shortcut_message(14)
+            self.class_log.info("Statescript trigger for well 1")
+            well = 1
+            record_head_direction_stim = True
+        if (is_within_angle_range and is_in_center_well_proximity and
+            abs(angle - angle_well_2) <= self.to_well_angle_range):
+
+            networkclient.send_statescript_shortcut_message(14)
+            self.class_log.info("Statescript trigger for well 2")
+            well = 2
+            record_head_direction_stim = True
+
+        if record_head_direction_stim:
+            self.write_record(
+                realtime_base.RecordIDs.STIM_HEAD_DIRECTION, bin_timestamp, well, raw_x, raw_y,
+                raw_x2, raw_y2, angle, angle_well_1, angle_well_2, self.to_well_angle_range,
+                self.within_angle_range, dist, self.max_center_well_dist_head, 
+                self.min_duration_head_angle, self.head_direction_lockout_time)
+        
+
     # MEC: this function sums the posterior during each ripple, then sends shortcut message
     # need to add location filter so it only sends message when rat is at rip/wait well - no, that is in statescript
     def posterior_sum(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, dec_rank, tet1,tet2,tet3,tet4,tet5,networkclient):
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
         self.box_post = box
@@ -1105,7 +1175,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         if (self._in_lockout and self.bin_timestamp_1 > (self._last_lockout_timestamp + self._lockout_time)):
             self._in_lockout = False
             self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-                              self.bin_timestamp, time, self._lockout_count, self._in_lockout,
+                              self.bin_timestamp, mpi_time, self._lockout_count, self._in_lockout,
                               0, self.big_rip_message_sent, self.spike_count)
             #print('non local event end. num:',self._lockout_count,'current',self.bin_timestamp_1,
             #    'last',self._last_lockout_timestamp,'lock time',self._lockout_time)
@@ -1174,7 +1244,7 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
 
     def __next__(self):
         rdy = self.req.Test()
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
         if rdy:
 
             message = decoder_process.PosteriorSum.unpack(self.msg_buffer)
@@ -1212,13 +1282,13 @@ class VelocityPositionRecvInterface(realtime_base.RealtimeMPIClass):
         self.networkclient = networkclient
         # NOTE: if you dont know how large the buffer should be, set it to a large number
         # then you will get an error saying what it should be set to
-        self.msg_buffer = bytearray(28)
+        self.msg_buffer = bytearray(68)
         self.req = self.comm.Irecv(
             buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
 
     def __next__(self):
         rdy = self.req.Test()
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
         if rdy:
 
             message = decoder_process.VelocityPosition.unpack(self.msg_buffer)
@@ -1226,8 +1296,12 @@ class VelocityPositionRecvInterface(realtime_base.RealtimeMPIClass):
                 buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
 
             # okay so we are receiving the message! but now it needs to get into the stim decider
-            self.stim.velocity_position(bin_timestamp=message.bin_timestamp, raw_x=message.raw_x,
-                raw_y=message.raw_y, pos=message.pos, vel=message.vel, pos_dec_rank=message.rank)
+            self.stim.velocity_position(
+                bin_timestamp=message.bin_timestamp, raw_x=message.raw_x, raw_y=message.raw_y,
+                raw_x2=message.raw_x2, raw_y2=message.raw_y2, angle=message.angle,
+                angle_well_1=message.angle_well_1, angle_well_2=message.angle_well_2,
+                pos=message.pos, vel=message.vel, pos_dec_rank=message.rank,
+                networkclient=self.networkclient)
             #print('posterior sum message supervisor: ',message.timestamp,time*1000)
             # return posterior_sum
 

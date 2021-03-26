@@ -74,24 +74,34 @@ class VelocityPosition(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'Iiiidi'
+    _byte_format = 'Iiiiidddidi'
 
-    def __init__(self, bin_timestamp, raw_x, raw_y, pos, vel, rank):
+    def __init__(self, bin_timestamp, raw_x, raw_y, raw_x2, raw_y2, angle, angle_well_1,
+                 angle_well_2, pos, vel, rank):
         self.bin_timestamp = bin_timestamp
         self.raw_x = raw_x
         self.raw_y = raw_y
+        self.raw_x2 = raw_x2
+        self.raw_y2 = raw_y2
+        self.angle = angle
+        self.angle_well_1 = angle_well_1
+        self.angle_well_2 = angle_well_2
         self.pos = pos
         self.vel = vel
         self.rank = rank
 
     def pack(self):
-        return struct.pack(self._byte_format, self.bin_timestamp, self.raw_x, self.raw_y, self.pos, self.vel,self.rank)
+        return struct.pack(self._byte_format, self.bin_timestamp, self.raw_x, self.raw_y,
+                           self.raw_x2, self.raw_y2, self.angle, self.angle_well_1,
+                           self.angle_well_2, self.pos, self.vel,self.rank)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, raw_x, raw_y, pos, vel, rank = struct.unpack(
+        bin_timestamp, raw_x, raw_y, raw_x2, raw_y2, angle, angle_well_1, angle_well_2, pos, vel, rank = struct.unpack(
             cls._byte_format, message_bytes)
-        return cls(bin_timestamp=bin_timestamp, raw_x=raw_x, raw_y=raw_y, pos=pos, vel=vel, rank=rank)
+        return cls(bin_timestamp=bin_timestamp, raw_x=raw_x, raw_y=raw_y,
+                   raw_x2=raw_x2, raw_y2=raw_y2, angle=angle, angle_well_1=angle_well_1,
+                   angle_well_2=angle_well_2, pos=pos, vel=vel, rank=rank)
 
 
 class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
@@ -121,8 +131,10 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
         #print('stim_message: ',message,self.config['rank']['decoder'],self.rank)
 
     # def sending velocity&position message to supervisor with VEL_POS tag
-    def send_vel_pos_message(self, bin_timestamp, raw_x, raw_y, pos, vel, rank):
-        message = VelocityPosition(bin_timestamp, raw_x, raw_y, pos, vel, rank)
+    def send_vel_pos_message(self, bin_timestamp, raw_x, raw_y, raw_x2, raw_y2, angle,
+                             angle_well_1, angle_well_2, pos, vel, rank):
+        message = VelocityPosition(bin_timestamp, raw_x, raw_y, raw_x2, raw_y2, angle,
+                                   angle_well_1, angle_well_2, pos, vel, rank)
         #print('vel_message: ',message)
 
         self.comm.Send(buf=message.pack(),
@@ -734,7 +746,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                            for x in range(config['encoder']['position']['bins'])],
                                                           ['timestamp', 'elec_grp_id',
                                                               'real_bin', 'late_bin'],
-                                                          ['bin_timestamp', 'bin', 'raw_x', 'raw_y',
+                                                          ['bin_timestamp', 'bin', 'raw_x', 'raw_y', 'raw_x2', 'raw_y2',
                                                            'segment', 'pos_on_seg',
                                                            'linear_pos', 'velocity','dec_rank'] + ['x{:0{dig}d}'.
                                                                         format(x, dig=len(str(config['encoder']['position']['bins'])))
@@ -743,7 +755,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                            'qddqq' + 'd' *
                                                            config['encoder']['position']['bins'],
                                                            'qiii',
-                                                           'qqqqqdddq' + 'd' * config['encoder']['position']['bins']])
+                                                           'qqqqqqqdddq' + 'd' * config['encoder']['position']['bins']])
         # i think if you change second q to d above, then you can replace real_pos_time
         # with velocity
         # NOTE: q is symbol for integer, d is symbol for decimal
@@ -819,6 +831,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.posterior_max = 0
         self.posterior_sum_target = 0
         self.posterior_sum_offtarget = 0
+
+        self.well_1_x = self.config['head_direction']['well_pos'][0][0]
+        self.well_1_y = self.config['head_direction']['well_pos'][0][1]
+        self.well_2_x = self.config['head_direction']['well_pos'][1][0]
+        self.well_2_y = self.config['head_direction']['well_pos'][1][1]
 
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
@@ -943,12 +960,11 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # check for multiple timestamps here - if tet list is split in 2 we can just remove any duplicates
 
                 # NEW VERSION: should be much faster than pandas conversion
-                # note: use `arr[tuple(seq)]` instead of `arr[seq]`. line 907
                 #print(posterior_spikes.shape)
                 spikes_before = posterior_spikes.shape[0]
                 _, inds, counts = np.unique(posterior_spikes[:, 0], return_index=True, return_counts=True)
-                unique_inds = inds[np.argwhere(counts == 1).squeeze()]
-                posterior_spikes = posterior_spikes[[unique_inds]]
+                unique_inds = np.atleast_1d(inds[np.argwhere(counts == 1).squeeze()])
+                posterior_spikes = posterior_spikes[unique_inds]
                 spikes_after = posterior_spikes.shape[0]
                 if spikes_before != spikes_after:
                     #print('dup spikes',spikes_before,spikes_after)
@@ -1199,14 +1215,31 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # TO DO: save raw X and raw Y also
                 self.write_record(realtime_base.RecordIDs.OCCUPANCY,
                                   pos_data.timestamp, self.current_time_bin,
-                                  pos_data.x, pos_data.y,
+                                  pos_data.x, pos_data.y, pos_data.x2, pos_data.y2,
                                   pos_data.segment, pos_data.position,
                                   current_pos, self.current_vel, self.rank, *occupancy)
+
+                angle = (
+                    180 * np.pi *
+                    np.arctan2(
+                        pos_data.y2 - pos_data.y,
+                        pos_data.x2 - pos_data.x))
+                angle_well_1 = (
+                    180 * np.pi *
+                    np.arctan2(
+                        self.well_1_y - pos_data.y,
+                        self.well_1_x - pos_data.x))
+                angle_well_2 = (
+                    180 * np.pi *
+                    np.arctan2(
+                        self.well_2_y - pos_data.y,
+                        self.well_2_x - pos_data.x))
 
                 # send message VEL_POS to main_process so that shortcut message can by filtered by velocity and position
                 # note: used to send bin_timestamp, but main process doesnt use the timestamp for anything, so 
                 # we can use the pos data timestamp instead
                 self.mpi_send.send_vel_pos_message(pos_data.timestamp, pos_data.x, pos_data.y,
+                                                   pos_data.x2, pos_data.y2, angle, angle_well_1, angle_well_2,
                                                    current_pos, self.current_vel, self.rank)
 
                 self.pos_msg_counter += 1

@@ -87,7 +87,7 @@ class LinearPosPoint(PrintableMessage):
 class CameraModulePoint(PrintableMessage):
     _byte_format = '=qidii'
 
-    def __init__(self, timestamp, segment, position, x, y, *, x2=0, y2=0):
+    def __init__(self, timestamp, segment, position, x, y, x2, y2):
         self.timestamp = timestamp
         self.segment = segment
         self.position = position
