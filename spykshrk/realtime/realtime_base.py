@@ -43,6 +43,7 @@ class RecordIDs(IntEnum):
     STIM_STATE = 10
     STIM_LOCKOUT = 11
     STIM_MESSAGE = 12
+    STIM_HEAD_DIRECTION = 13
 
     TIMING = 100
 

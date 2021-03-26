@@ -42,7 +42,7 @@ def main(argv):
         'formatters': {
             'simple': {
                 'format': ('%(asctime)s.%(msecs)03d [%(levelname)s] '
-                           '(MPI-{:02d}) %(threadName)s %(name)s: %(message)s').format(rank),
+                           '(MPI-{:02d}) [PID: %(process)d] %(name)s: %(message)s').format(rank),
                 'datefmt': '%H:%M:%S',
             },
         },
@@ -98,7 +98,7 @@ def main(argv):
 
     comm.Barrier()
     if process is not None:
-        time.sleep(rank)
+        time.sleep(0.1*rank)
         logging.info(f"Rank {rank} starting main loop")
         process.main_loop()
         logging.info(f"Rank {rank} finished main loop, exiting main")

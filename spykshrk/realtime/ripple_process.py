@@ -21,7 +21,9 @@ from spykshrk.realtime.realtime_base import (
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 from spykshrk.realtime.gui_process import GuiRippleParameterMessage
 
-
+##########################################################################
+# Messages
+##########################################################################
 class RippleParameterMessage(rt_logging.PrintableMessage):
     def __init__(self, rip_coeff1=1.2, rip_coeff2=0.2, ripple_threshold=5, baseline_window_timestamp=10000, n_above_thresh=1,
                  lockout_time=7500, ripple_conditioning_lockout_time = 7500, posterior_lockout_time = 7500,
@@ -85,6 +87,162 @@ class RippleThresholdState(rt_logging.PrintableMessage):
                    threshold_state=threshold_state, conditioning_thresh_state=conditioning_thresh_state)
 
 
+##########################################################################
+# Interfaces
+##########################################################################
+class RippleMPISendInterface(realtime_base.RealtimeMPIClass):
+
+    def __init__(self, comm: MPI.Comm, rank, config):
+        super().__init__(comm=comm, rank=rank, config=config)
+
+        self.num_ntrodes = None
+
+    def send_record_register_messages(self, record_register_messages):
+        for message in record_register_messages:
+            self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
+                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+        self.comm.send(
+            obj=BinaryRecordSendComplete(), dest=self.config['rank']['supervisor'],
+            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def send_ripple_status_message(self, status_dict_list):
+        if len(status_dict_list) == 0:
+            status_dict_list.append({'No ripple filters enabled.': None})
+
+        status_dict_list.insert(0, {'mpi_rank': self.rank})
+        self.comm.send(obj=RippleStatusDictListMessage(self.rank, status_dict_list),
+                       dest=self.config['rank']['supervisor'],
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def send_ripple_thresh_state(self, timestamp, elec_grp_id, thresh_state, conditioning_thresh_state):
+        message = RippleThresholdState(timestamp, elec_grp_id, thresh_state, conditioning_thresh_state)
+
+        self.comm.Send(buf=message.pack(),
+                       dest=self.config['rank']['supervisor'],
+                       tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
+
+    # NOTE: reactivate this to send LFP time keeper to decoder
+    # we only want to call this for one ripple node - somehow use the value, rank == 2
+    def send_ripple_thresh_state_decoder(self, timestamp, elec_grp_id, thresh_state, conditioning_thresh_state):
+        message = RippleThresholdState(timestamp, elec_grp_id, thresh_state, conditioning_thresh_state)
+
+        # original - 1 decoder
+        #self.comm.Send(buf=message.pack(),
+        #               dest=self.config['rank']['decoder'],
+        #               tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
+        # new - more than 1 decoder
+        for rank in self.config['rank']['decoder']:
+            self.comm.Send(buf=message.pack(),dest=rank,tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)            
+
+    def forward_timing_message(self, timing_msg: timing_system.TimingMessage):
+        self.comm.Send(buf=timing_msg.pack(),
+                       dest=self.config['rank']['supervisor'],
+                       tag=realtime_base.MPIMessageTag.TIMING_MESSAGE.value)
+
+    def send_time_sync_report(self, time):
+        self.comm.send(obj=realtime_base.TimeSyncReport(time),
+                       dest=self.config['rank']['supervisor'],
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def all_barrier(self):
+        self.comm.Barrier()
+
+
+class RippleMPIRecvInterface(realtime_base.RealtimeMPIClass):
+
+    def __init__(self, comm: MPI.Comm, rank, config, ripple_manager):
+        super().__init__(comm=comm, rank=rank, config=config)
+
+        self.rip_man = ripple_manager
+        self.main_rank = self.config['rank']['supervisor']
+        self.num_ntrodes = None
+
+        self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.process_request_message(msg)
+
+            self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def process_request_message(self, message):
+
+        if isinstance(message, realtime_base.TerminateMessage):
+            self.class_log.debug("Received TerminateMessage")
+            raise StopIteration()
+
+        elif isinstance(message, realtime_base.NumTrodesMessage):
+            self.rip_man.set_num_trodes(message)
+
+        #MEC commented out
+        #elif isinstance(message, ChannelSelection):
+        #    self.rip_man.select_ntrodes(message.ntrode_list)
+
+        #MEC added
+        elif isinstance(message, RippleChannelSelection):
+            self.rip_man.select_ntrodes(message.ripple_ntrode_list)
+
+        elif isinstance(message, TurnOnDataStream):
+            self.rip_man.turn_on_datastreams()
+
+        elif isinstance(message, RippleParameterMessage):
+            self.rip_man.update_ripple_parameter(message)
+
+        elif isinstance(message, realtime_base.EnableStimulationMessage):
+            self.rip_man.enable_stimulation()
+
+        elif isinstance(message, realtime_base.DisableStimulationMessage):
+            self.rip_man.disable_stimulation()
+
+        elif isinstance(message, binary_record.BinaryRecordCreateMessage):
+            self.rip_man.set_record_writer_from_message(message)
+
+        elif isinstance(message, realtime_base.StartRecordMessage):
+            self.rip_man.start_record_writing()
+
+        elif isinstance(message, realtime_base.StopRecordMessage):
+            self.rip_man.stop_record_writing()
+
+        elif isinstance(message, realtime_base.CloseRecordMessage):
+            self.rip_man.close_record()
+
+        elif isinstance(message, CustomRippleBaselineMeanMessage):
+            self.rip_man.set_custom_baseline_mean(message.mean_dict)
+
+        elif isinstance(message, CustomRippleBaselineStdMessage):
+            self.rip_man.set_custom_baseline_std(message.std_dict)
+
+        elif isinstance(message, realtime_base.RequestStatusMessage):
+            self.class_log.debug('Received RequestStatusMessage.')
+            self.rip_man.process_status_dict_request()
+
+        elif isinstance(message, realtime_base.ResetFilterMessage):
+            self.rip_man.reset_filters()
+
+        elif isinstance(message, realtime_base.TimeSyncInit):
+            self.rip_man.sync_time()
+
+        elif isinstance(message, realtime_base.TimeSyncSetOffset):
+            self.rip_man.update_offset(message.offset_time)
+
+
+class RippleGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, ripple_manager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.ripple_manager = ripple_manager
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.ripple_manager.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+
+##########################################################################
+# Data handlers/managers
+##########################################################################
 class RippleFilter(rt_logging.LoggingClass):
     def __init__(self, rec_base: realtime_base.BinaryRecordBase, param: RippleParameterMessage,
                  elec_grp_id,config):
@@ -461,64 +619,6 @@ class RippleFilter(rt_logging.LoggingClass):
         self.conditioning_ripple_threshold = thresh
 
 
-class RippleMPISendInterface(realtime_base.RealtimeMPIClass):
-
-    def __init__(self, comm: MPI.Comm, rank, config):
-        super().__init__(comm=comm, rank=rank, config=config)
-
-        self.num_ntrodes = None
-
-    def send_record_register_messages(self, record_register_messages):
-        for message in record_register_messages:
-            self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
-                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-        self.comm.send(
-            obj=BinaryRecordSendComplete(), dest=self.config['rank']['supervisor'],
-            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-
-    def send_ripple_status_message(self, status_dict_list):
-        if len(status_dict_list) == 0:
-            status_dict_list.append({'No ripple filters enabled.': None})
-
-        status_dict_list.insert(0, {'mpi_rank': self.rank})
-        self.comm.send(obj=RippleStatusDictListMessage(self.rank, status_dict_list),
-                       dest=self.config['rank']['supervisor'],
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-
-    def send_ripple_thresh_state(self, timestamp, elec_grp_id, thresh_state, conditioning_thresh_state):
-        message = RippleThresholdState(timestamp, elec_grp_id, thresh_state, conditioning_thresh_state)
-
-        self.comm.Send(buf=message.pack(),
-                       dest=self.config['rank']['supervisor'],
-                       tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
-
-    # NOTE: reactivate this to send LFP time keeper to decoder
-    # we only want to call this for one ripple node - somehow use the value, rank == 2
-    def send_ripple_thresh_state_decoder(self, timestamp, elec_grp_id, thresh_state, conditioning_thresh_state):
-        message = RippleThresholdState(timestamp, elec_grp_id, thresh_state, conditioning_thresh_state)
-
-        # original - 1 decoder
-        #self.comm.Send(buf=message.pack(),
-        #               dest=self.config['rank']['decoder'],
-        #               tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
-        # new - more than 1 decoder
-        for rank in self.config['rank']['decoder']:
-            self.comm.Send(buf=message.pack(),dest=rank,tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)            
-
-    def forward_timing_message(self, timing_msg: timing_system.TimingMessage):
-        self.comm.Send(buf=timing_msg.pack(),
-                       dest=self.config['rank']['supervisor'],
-                       tag=realtime_base.MPIMessageTag.TIMING_MESSAGE.value)
-
-    def send_time_sync_report(self, time):
-        self.comm.send(obj=realtime_base.TimeSyncReport(time),
-                       dest=self.config['rank']['supervisor'],
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def all_barrier(self):
-        self.comm.Barrier()
-
-
 class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.LoggingClass):
     def __init__(self, rank, local_rec_manager, send_interface: RippleMPISendInterface,
                  data_interface: realtime_base.DataSourceReceiver, config):
@@ -682,85 +782,9 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                 pass
 
 
-class RippleMPIRecvInterface(realtime_base.RealtimeMPIClass):
-
-    def __init__(self, comm: MPI.Comm, rank, config, ripple_manager: RippleManager):
-        super().__init__(comm=comm, rank=rank, config=config)
-
-        self.rip_man = ripple_manager
-        self.main_rank = self.config['rank']['supervisor']
-        self.num_ntrodes = None
-
-        self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.process_request_message(msg)
-
-            self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-
-    def process_request_message(self, message):
-
-        if isinstance(message, realtime_base.TerminateMessage):
-            self.class_log.debug("Received TerminateMessage")
-            raise StopIteration()
-
-        elif isinstance(message, realtime_base.NumTrodesMessage):
-            self.rip_man.set_num_trodes(message)
-
-        #MEC commented out
-        #elif isinstance(message, ChannelSelection):
-        #    self.rip_man.select_ntrodes(message.ntrode_list)
-
-        #MEC added
-        elif isinstance(message, RippleChannelSelection):
-            self.rip_man.select_ntrodes(message.ripple_ntrode_list)
-
-        elif isinstance(message, TurnOnDataStream):
-            self.rip_man.turn_on_datastreams()
-
-        elif isinstance(message, RippleParameterMessage):
-            self.rip_man.update_ripple_parameter(message)
-
-        elif isinstance(message, realtime_base.EnableStimulationMessage):
-            self.rip_man.enable_stimulation()
-
-        elif isinstance(message, realtime_base.DisableStimulationMessage):
-            self.rip_man.disable_stimulation()
-
-        elif isinstance(message, binary_record.BinaryRecordCreateMessage):
-            self.rip_man.set_record_writer_from_message(message)
-
-        elif isinstance(message, realtime_base.StartRecordMessage):
-            self.rip_man.start_record_writing()
-
-        elif isinstance(message, realtime_base.StopRecordMessage):
-            self.rip_man.stop_record_writing()
-
-        elif isinstance(message, realtime_base.CloseRecordMessage):
-            self.rip_man.close_record()
-
-        elif isinstance(message, CustomRippleBaselineMeanMessage):
-            self.rip_man.set_custom_baseline_mean(message.mean_dict)
-
-        elif isinstance(message, CustomRippleBaselineStdMessage):
-            self.rip_man.set_custom_baseline_std(message.std_dict)
-
-        elif isinstance(message, realtime_base.RequestStatusMessage):
-            self.class_log.debug('Received RequestStatusMessage.')
-            self.rip_man.process_status_dict_request()
-
-        elif isinstance(message, realtime_base.ResetFilterMessage):
-            self.rip_man.reset_filters()
-
-        elif isinstance(message, realtime_base.TimeSyncInit):
-            self.rip_man.sync_time()
-
-        elif isinstance(message, realtime_base.TimeSyncSetOffset):
-            self.rip_man.update_offset(message.offset_time)
-
-
+##########################################################################
+# Process
+##########################################################################
 class RippleProcess(realtime_base.RealtimeProcess):
 
     def __init__(self, comm: MPI.Comm, rank, config):
@@ -822,15 +846,3 @@ class RippleProcess(realtime_base.RealtimeProcess):
             self.class_log.info('Terminating RippleProcess (rank: {:})'.format(self.rank))
 
         self.class_log.info("Ripple Process Main Process reached end, exiting.")
-
-class RippleGuiRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, ripple_manager:RippleManager):
-        super().__init__(comm=comm, rank=rank, config=config)
-        self.ripple_manager = ripple_manager
-        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.ripple_manager.process_gui_request_message(msg)
-            self.req = self.comm.irecv(source=self.config["rank"]["gui"])

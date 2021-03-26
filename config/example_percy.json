@@ -65,6 +65,19 @@
 
     "reward_mode" : "conditioning_ripples",
 
+    "camera" :{
+        "frame_rate": 30
+    },
+
+    "head_direction": {
+        "min_duration": 2,
+        "well_angle_range": 15,
+        "within_angle_range": 10,
+        "max_center_well_dist": 15,
+        "well_pos": [[928.895, 255.175], [301.263, 277.608]],
+        "lockout_time": 2
+    },
+
     "ripple": {
         "RippleParameterMessage": {
             "rip_coeff1": 1.2,

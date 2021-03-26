@@ -98,7 +98,9 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
                     self.temp_data['lineSegment'],
                     self.temp_data['posOnSegment'],
                     self.temp_data['x'],
-                    self.temp_data['y'])
+                    self.temp_data['y'],
+                    self.temp_data['x2'],
+                    self.temp_data['y2'])
                 return datapoint, None
 
         except ZMQError:

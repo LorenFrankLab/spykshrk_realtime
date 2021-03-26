@@ -34,6 +34,319 @@ import logging
 #     print('Warning: Attribute Error ({}), disabling IPython TerminalPdb.'.format(err))
 #     bp = lambda: None
 
+##########################################################################
+# Messages (not currently in use)
+##########################################################################
+class StimulationDecision(rt_logging.PrintableMessage):
+    """"Message containing whether or not at a given timestamp a ntrode's ripple filter threshold is crossed.
+
+    This message has helper serializer/deserializer functions to be used to speed transmission.
+    """
+    _byte_format = 'Ii'
+
+    def __init__(self, timestamp, stim_decision):
+        self.timestamp = timestamp
+        self.stim_decision = stim_decision
+
+    def pack(self):
+        return struct.pack(self._byte_format, self.timestamp, self.stim_decision)
+
+    @classmethod
+    def unpack(cls, message_bytes):
+        timestamp, stim_decision = struct.unpack(
+            cls._byte_format, message_bytes)
+        return cls(timestamp=timestamp, stim_decision=stim_decision)
+
+##########################################################################
+# Interfaces
+##########################################################################
+class MainMPISendInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config):
+
+        super().__init__(comm=comm, rank=rank, config=config)
+
+    def send_num_ntrode(self, rank, num_ntrodes):
+        self.class_log.debug(
+            "Sending number of ntrodes to rank {:}".format(rank))
+        self.comm.send(realtime_base.NumTrodesMessage(num_ntrodes), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_channel_selection(self, rank, channel_selects):
+        #print('sending channel selection',rank,channel_selects)
+        # print('object',spykshrk.realtime.realtime_base.ChannelSelection(channel_selects))
+        self.comm.send(obj=realtime_base.ChannelSelection(channel_selects), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    # MEC added
+    def send_ripple_channel_selection(self, rank, channel_selects):
+        self.comm.send(obj=realtime_base.RippleChannelSelection(channel_selects), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_new_writer_message(self, rank, new_writer_message):
+        self.comm.send(obj=new_writer_message, dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_start_rec_message(self, rank):
+        self.comm.send(obj=realtime_base.StartRecordMessage(), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_turn_on_datastreams(self, rank):
+        self.comm.send(obj=realtime_base.TurnOnDataStream(), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_ripple_parameter(self, rank, param_message):
+        self.comm.send(obj=param_message, dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_ripple_baseline_mean(self, rank, mean_dict):
+        self.comm.send(obj=ripple_process.CustomRippleBaselineMeanMessage(mean_dict=mean_dict), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_ripple_baseline_std(self, rank, std_dict):
+        self.comm.send(obj=ripple_process.CustomRippleBaselineStdMessage(std_dict=std_dict), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_time_sync_simulator(self):
+        if self.config['datasource'] == 'trodes':
+            ranks = list(range(self.comm.size))
+            ranks.remove(self.rank)
+            for rank in ranks:
+                self.comm.send(obj=realtime_base.TimeSyncInit(), dest=rank,
+                               tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+        else:
+            self.comm.send(obj=realtime_base.TimeSyncInit(), dest=self.config['rank']['simulator'],
+                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def all_barrier(self):
+        self.comm.Barrier()
+
+    def send_time_sync_offset(self, rank, offset_time):
+        self.comm.send(obj=realtime_base.TimeSyncSetOffset(offset_time), dest=rank,
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def terminate_all(self):
+        terminate_ranks = list(range(self.comm.size))
+        terminate_ranks.remove(self.rank)
+        for rank in terminate_ranks:
+            self.comm.send(obj=realtime_base.TerminateMessage(), dest=rank,
+                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def send_setup_complete(self):
+        self.comm.send(obj=realtime_base.SetupComplete(),
+                       dest=self.config['rank']['gui'],
+                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+
+class StimDeciderMPISendInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config):
+        super(StimDeciderMPISendInterface, self).__init__(
+            comm=comm, rank=rank, config=config)
+        self.comm = comm
+        self.rank = rank
+        self.config = config
+
+    def start_stimulation(self):
+        pass
+
+    def send_record_register_messages(self, record_register_messages):
+        self.class_log.debug("Sending binary record registration messages.")
+        for message in record_register_messages:
+            self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
+                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+
+class StimDeciderMPIRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, stim_decider, networkclient):
+        super(StimDeciderMPIRecvInterface, self).__init__(
+            comm=comm, rank=rank, config=config)
+
+        self.stim = stim_decider
+        self.networkclient = networkclient
+
+        self.mpi_status = MPI.Status()
+
+        self.feedback_bytes = bytearray(16)
+        self.timing_bytes = bytearray(100)
+
+        self.mpi_reqs = []
+        self.mpi_statuses = []
+
+        req_feedback = self.comm.Irecv(buf=self.feedback_bytes,
+                                       tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
+        self.mpi_statuses.append(MPI.Status())
+        self.mpi_reqs.append(req_feedback)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        rdy = MPI.Request.Testall(
+            requests=self.mpi_reqs, statuses=self.mpi_statuses)
+
+        if rdy:
+            if self.mpi_statuses[0].source in self.config['rank']['ripples']:
+                # MEC: we need to add ripple size to this messsage
+                message = ripple_process.RippleThresholdState.unpack(
+                    message_bytes=self.feedback_bytes)
+                self.stim.update_ripple_threshold_state(timestamp=message.timestamp,
+                                                        elec_grp_id=message.elec_grp_id,
+                                                        threshold_state=message.threshold_state,
+                                                        conditioning_thresh_state=message.conditioning_thresh_state,
+                                                        networkclient=self.networkclient)
+
+                self.mpi_reqs[0] = self.comm.Irecv(buf=self.feedback_bytes,
+                                                   tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
+
+
+class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):
+
+    def __init__(self, comm: MPI.Comm, rank, config, main_manager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.main_manager = main_manager
+
+        self.mpi_status = MPI.Status()
+
+        self.req_cmd = self.comm.irecv(
+            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+
+        (req_rdy, msg) = self.req_cmd.test(status=self.mpi_status)
+
+        if req_rdy:
+            self.process_request_message(msg)
+
+            self.req_cmd = self.comm.irecv(
+                tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def process_request_message(self, message):
+
+        if isinstance(message, simulator_process.SimTrodeListMessage):
+            self.main_manager.handle_ntrode_list(message.trode_list)
+            print('decoding tetrodes message', message.trode_list)
+
+        # MEC added
+        if isinstance(message, simulator_process.RippleTrodeListMessage):
+            self.main_manager.handle_ripple_ntrode_list(
+                message.ripple_trode_list)
+            print('ripple tetrodes message', message.ripple_trode_list)
+
+        elif isinstance(message, binary_record.BinaryRecordTypeMessage):
+            self.class_log.debug("BinaryRecordTypeMessage received for rec id {} from rank {}".
+                                 format(message.rec_id, self.mpi_status.source))
+            self.main_manager.register_rec_type_message(message)
+
+        elif isinstance(message, realtime_base.TimeSyncReport):
+            self.main_manager.send_calc_offset_time(
+                self.mpi_status.source, message.time)
+
+        elif isinstance(message, realtime_base.TerminateMessage):
+            self.class_log.info('Received TerminateMessage from rank {:}, now terminating all.'.
+                                format(self.mpi_status.source))
+
+            self.main_manager.trigger_termination()
+
+        elif isinstance(message, realtime_base.BinaryRecordSendComplete):
+            self.main_manager.update_all_rank_setup_status(self.mpi_status.source)
+
+
+class VelocityPositionRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, stim_decider, networkclient):
+        super(VelocityPositionRecvInterface, self).__init__(
+            comm=comm, rank=rank, config=config)
+
+        self.stim = stim_decider
+        self.networkclient = networkclient
+        # NOTE: if you dont know how large the buffer should be, set it to a large number
+        # then you will get an error saying what it should be set to
+        self.msg_buffer = bytearray(68)
+        self.req = self.comm.Irecv(
+            buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
+
+    def __next__(self):
+        rdy = self.req.Test()
+        mpi_time = MPI.Wtime()
+        if rdy:
+
+            message = decoder_process.VelocityPosition.unpack(self.msg_buffer)
+            self.req = self.comm.Irecv(
+                buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
+
+            # okay so we are receiving the message! but now it needs to get into the stim decider
+            self.stim.velocity_position(
+                bin_timestamp=message.bin_timestamp, raw_x=message.raw_x, raw_y=message.raw_y,
+                raw_x2=message.raw_x2, raw_y2=message.raw_y2, angle=message.angle,
+                angle_well_1=message.angle_well_1, angle_well_2=message.angle_well_2,
+                pos=message.pos, vel=message.vel, pos_dec_rank=message.rank,
+                networkclient=self.networkclient)
+            #print('posterior sum message supervisor: ',message.timestamp,time*1000)
+            # return posterior_sum
+
+        else:
+            return None
+
+
+class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, stim_decider, networkclient):
+        super(PosteriorSumRecvInterface, self).__init__(
+            comm=comm, rank=rank, config=config)
+
+        self.stim = stim_decider
+        self.networkclient = networkclient
+        # NOTE: if you dont know how large the buffer should be, set it to a large number
+        # then you will get an error saying what it should be set to
+        # bytearray was 80 before adding spike_count, 92 before adding rank
+        self.msg_buffer = bytearray(132)
+        self.req = self.comm.Irecv(
+            buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
+
+    def __next__(self):
+        rdy = self.req.Test()
+        mpi_time = MPI.Wtime()
+        if rdy:
+
+            message = decoder_process.PosteriorSum.unpack(self.msg_buffer)
+            self.req = self.comm.Irecv(
+                buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
+
+            # need to activate record_timing in this class if we want to use this here
+            # self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
+            #                   datatype=datatypes.Datatypes.SPIKES, label='post_sum_recv')
+
+            # okay so we are receiving the message! but now it needs to get into the stim decider
+            #print('posterior from decoder',message)
+            self.stim.posterior_sum(bin_timestamp=message.bin_timestamp, spike_timestamp=message.spike_timestamp,
+                                    target=message.target, offtarget=message.offtarget, box=message.box, arm1=message.arm1,
+                                    arm2=message.arm2, arm3=message.arm3, arm4=message.arm4, arm5=message.arm5,
+                                    arm6=message.arm6, arm7=message.arm7, arm8=message.arm8,
+                                    spike_count=message.spike_count, crit_ind=message.crit_ind,
+                                    posterior_max=message.posterior_max, dec_rank=message.rank, 
+                                    tet1=message.tet1,tet2=message.tet2,tet3=message.tet3,
+                                    tet4=message.tet4,tet5=message.tet5,
+                                    networkclient=self.networkclient)
+            #print('posterior sum message supervisor: ',message.spike_timestamp,time*1000)
+            # return posterior_sum
+
+        else:
+            return None
+
+
+class MainGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, stim_decider):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.stim_decider = stim_decider
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.stim_decider.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+
 ############################################################################
 # Remove altogether when system has stabilized to new network API
 ############################################################################
@@ -77,10 +390,6 @@ import logging
 #     def recv_quit(self):
 #         self.terminate()
 
-# for minimal changes to the code.
-# when the statescript message is implemented,
-# we will have to make a different class for that
-# and change the code accordingly
 class MainProcessClient(object):
     def __init__(self, config, manager):
         self.config = config
@@ -109,177 +418,9 @@ class MainProcessClient(object):
         except ZMQError:
             pass
 
-class MainProcess(realtime_base.RealtimeProcess):
-
-    def __init__(self, comm: MPI.Comm, rank, config):
-
-        self.comm = comm    # type: MPI.Comm
-        self.rank = rank
-        self.config = config
-
-        super().__init__(comm=comm, rank=rank, config=config)
-
-        # MEC added
-        self.stim_decider_send_interface = StimDeciderMPISendInterface(
-            comm=comm, rank=rank, config=config)
-
-        self.stim_decider = StimDecider(rank=rank, config=config,
-                                        send_interface=self.stim_decider_send_interface)
-
-        # self.posterior_recv_interface = PosteriorSumRecvInterface(comm=comm, rank=rank, config=config,
-        #                                                          stim_decider=self.stim_decider)
-
-        # self.stim_decider = StimDecider(rank=rank, config=config,
-        #                                send_interface=StimDeciderMPISendInterface(comm=comm,
-        #                                                                           rank=rank,
-        #                                                                           config=config))
-
-        # self.data_recv = StimDeciderMPIRecvInterface(comm=comm, rank=rank, config=config,
-        #                                             stim_decider=self.stim_decider)
-
-        self.send_interface = MainMPISendInterface(
-            comm=comm, rank=rank, config=config)
-
-        self.manager = MainSimulatorManager(rank=rank, config=config, parent=self, send_interface=self.send_interface,
-                                            stim_decider=self.stim_decider)
-        print('======================================')
-        print('In MainProcess: datasource = ', config['datasource'])
-        print('======================================')
-        if config['datasource'] == 'trodes':
-            # print('about to configure trdoes network for tetrode: ',
-            #       self.manager.handle_ntrode_list, self.rank)
-            # time.sleep(5+1*self.rank)
-
-            # self.networkclient = MainProcessClient(
-            #     "SpykshrkMainProc", config['trodes_network']['address'], config['trodes_network']['port'], self.config)
-            # if self.networkclient.initialize() != 0:
-            #     print("Network could not successfully initialize")
-            #     del self.networkclient
-            #     quit()
-            # # added MEC
-            # self.networkclient.initializeHardwareConnection()
-            # self.networkclient.registerStartupCallback(
-            #     self.manager.handle_ntrode_list)
-            # # added MEC
-            # self.networkclient.registerStartupCallbackRippleTetrodes(
-            #     self.manager.handle_ripple_ntrode_list)
-            # self.networkclient.registerTerminationCallback(
-            #     self.manager.trigger_termination)
-            # print('completed trodes setup')
-
-            #############################################################
-            self.networkclient = MainProcessClient(config, self.manager)
-            #############################################################
-
-        self.vel_pos_recv_interface = VelocityPositionRecvInterface(comm=comm, rank=rank, config=config,
-                                                                    stim_decider=self.stim_decider,
-                                                                    networkclient=self.networkclient)
-
-        self.posterior_recv_interface = PosteriorSumRecvInterface(comm=comm, rank=rank, config=config,
-                                                                  stim_decider=self.stim_decider,
-                                                                  networkclient=self.networkclient)
-
-        self.data_recv = StimDeciderMPIRecvInterface(comm=comm, rank=rank, config=config,
-                                                     stim_decider=self.stim_decider, networkclient=self.networkclient)
-
-        self.recv_interface = MainSimulatorMPIRecvInterface(comm=comm, rank=rank,
-                                                            config=config, main_manager=self.manager)
-
-        self.gui_recv = MainGuiRecvInterface(comm, rank, config, self.stim_decider)
-
-        self.terminate = False
-
-        self.mpi_status = MPI.Status()
-
-        self.started = False
-
-        # First Barrier to finish setting up nodes, waiting for Simulator to send ntrode list.
-        # The main loop must be active to receive binary record registration messages, so the
-        # first Barrier is placed here.
-        self.class_log.debug("First Barrier")
-        self.send_interface.all_barrier()
-        self.class_log.debug("Past First Barrier")
-
-    def trigger_termination(self):
-        self.terminate = True
-
-    def main_loop(self):
-        # self.thread.start()
-
-        check_user_input = True
-
-        # Synchronize rank times immediately
-        last_time_bin = int(time.time())
-
-        while not self.terminate:
-
-                # Synchronize rank times
-                if self.manager.time_sync_on:
-                    current_time_bin = int(time.time())
-                    if current_time_bin >= last_time_bin + 10:
-                        self.manager.synchronize_time()
-                        last_time_bin = current_time_bin
-
-                self.recv_interface.__next__()
-                self.data_recv.__next__()
-                self.vel_pos_recv_interface.__next__()
-                self.posterior_recv_interface.__next__()
-                self.networkclient.__next__()
-                self.gui_recv.__next__()
-
-                # hacky way to start other processes once sufficient time has passed
-                # to receive binary record messages
-                if check_user_input and self.manager.all_ranks_set_up:
-                    print("***************************************", flush=True)
-                    print("   All ranks are set up, ok to start   ", flush=True)
-                    print("***************************************", flush=True)
-                    self.send_interface.send_setup_complete()
-                    self.class_log.debug("Notified GUI that setup was complete")
-                    check_user_input = False
-                    # self.networkclient.start()
-
-        self.class_log.info("Main Process Main reached end, exiting.")
-
-
-class StimulationDecision(rt_logging.PrintableMessage):
-    """"Message containing whether or not at a given timestamp a ntrode's ripple filter threshold is crossed.
-
-    This message has helper serializer/deserializer functions to be used to speed transmission.
-    """
-    _byte_format = 'Ii'
-
-    def __init__(self, timestamp, stim_decision):
-        self.timestamp = timestamp
-        self.stim_decision = stim_decision
-
-    def pack(self):
-        return struct.pack(self._byte_format, self.timestamp, self.stim_decision)
-
-    @classmethod
-    def unpack(cls, message_bytes):
-        timestamp, stim_decision = struct.unpack(
-            cls._byte_format, message_bytes)
-        return cls(timestamp=timestamp, stim_decision=stim_decision)
-
-
-class StimDeciderMPISendInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config):
-        super(StimDeciderMPISendInterface, self).__init__(
-            comm=comm, rank=rank, config=config)
-        self.comm = comm
-        self.rank = rank
-        self.config = config
-
-    def start_stimulation(self):
-        pass
-
-    def send_record_register_messages(self, record_register_messages):
-        self.class_log.debug("Sending binary record registration messages.")
-        for message in record_register_messages:
-            self.comm.send(obj=message, dest=self.config['rank']['supervisor'],
-                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-
+##########################################################################
+# Data handlers/managers
+##########################################################################
 class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
     def __init__(self, rank, config,
                  send_interface: StimDeciderMPISendInterface, ripple_n_above_thresh=sys.maxsize,
@@ -292,7 +433,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                          send_interface=send_interface,
                          rec_ids=[realtime_base.RecordIDs.STIM_STATE,
                                   realtime_base.RecordIDs.STIM_LOCKOUT,
-                                  realtime_base.RecordIDs.STIM_MESSAGE],
+                                  realtime_base.RecordIDs.STIM_MESSAGE,
+                                  realtime_base.RecordIDs.STIM_HEAD_DIRECTION],
                          rec_labels=[['timestamp', 'elec_grp_id', 'threshold_state'],
                                      ['timestamp', 'velocity', 'lockout_num', 'lockout_state', 'tets_above_thresh',
                                       'big_rip_message_sent','spike_count'],
@@ -305,10 +447,16 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                       'spike_count_1','spike_count_2','ripple_tets',
                                       'box_1', 'arm1_1', 'arm2_1', 'arm3_1', 'arm4_1', 
                                       'box_2', 'arm1_2', 'arm2_2', 'arm3_2','arm4_2',
-                                      'unique_tets','center_well_dist']],
+                                      'unique_tets','center_well_dist'],
+                                      ['timestamp', 'well', 'raw_x', 'raw_y', 'raw_x2', 'raw_y2',
+                                       'angle', 'angle_well_1', 'angle_well_2',
+                                       'to_well_angle_range', 'within_angle_range',
+                                       'distance_from_center_well', 'max_distance_from_center_well',
+                                       'duration', 'lockout_time']],
                          rec_formats=['Iii',
                                       'Idiiddi',
-                                      'IIidiiidddidiididiidddddddddddddddddid'])
+                                      'IIidiiidddidiididiidddddddddddddddddid',
+                                      'IHhhhhddddddddd'])
         # NOTE: for binary files: I,i means integer, d means decimal
 
         self.rank = rank
@@ -488,10 +636,27 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.pos_bins = np.arange(0, self.max_pos, 1)
         self.pos_trajectory = np.zeros((1,self.max_pos))
 
+        # head direction params
+        # only an approximation since camera module timestamps do not come in at
+        # regularly spaced time intervals (although we assume the acquisition of
+        # frames is more or less at a constant frame rate)
+        div, rem = divmod(
+            self.config['camera']['frame_rate'] * self.config['head_direction']['min_duration'],
+            1)
+        if rem:
+            div += 1
+        self.angle_buffer = [None] * div
+        self.min_duration_head_angle = self.config['head_direction']['min_duration']
+        self.to_well_angle_range = self.config['head_direction']['well_angle_range']
+        self.within_angle_range = self.config['head_direction']['within_angle_range']
+        self.max_center_well_dist_head = self.config['head_direction']['max_center_well_dist']
+        self.head_direction_lockout_time = self.config['head_direction']['lockout_time']
+        self.head_direction_stim_time = 0
+
         # if self.config['datasource'] == 'trodes':
         #    self.networkclient = MainProcessClient("SpykshrkMainProc", config['trodes_network']['address'],config['trodes_network']['port'], self.config)
         # self.networkclient.initializeHardwareConnection()
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
 
         # Setup bin rec file
         # main_manager.rec_manager.register_rec_type_message(rec_type_message=self.get_record_register_message())
@@ -529,7 +694,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
             self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
                                datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
 
         # record timestamp from ripple node
         if elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]:
@@ -560,7 +725,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                                             self._ripple_lockout_time):
                 self._in_ripple_lockout = False
                 self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-                                  self.bin_timestamp_1, time, self._ripple_lockout_count, 
+                                  self.bin_timestamp_1, mpi_time, self._ripple_lockout_count, 
                                   self._in_ripple_lockout, num_above, 0, self.spike_count)
                 #print('ripple end. ripple num:',self._ripple_lockout_count,'timestamp',self.bin_timestamp_1)
                 self._ripple_lockout_count += 1
@@ -603,7 +768,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
     def posterior_sum_statescript_message(self, arm, networkclient):
         arm = arm
         networkclient = networkclient
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
 
         #remove posterior_time_bin from printing b/c we arent using it now
 
@@ -695,7 +860,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
             self.ripple_end = True
             self.write_record(realtime_base.RecordIDs.STIM_MESSAGE,
-                              self.bin_timestamp, self.spike_timestamp, self.lfp_timestamp, time, self.shortcut_message_sent,
+                              self.bin_timestamp, self.spike_timestamp, self.lfp_timestamp, mpi_time, self.shortcut_message_sent,
                               self._lockout_count, self.posterior_time_bin,
                               (self.lfp_timestamp - self.bin_timestamp) / 30, self.velocity,self.linearized_position,
                               self.posterior_spike_count, self.spike_count_base_avg, self.taskState,
@@ -715,7 +880,10 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     # MEC: this function brings in velocity and linearized position from decoder process
 
-    def velocity_position(self, bin_timestamp, raw_x, raw_y, pos, vel, pos_dec_rank):
+    def velocity_position(
+        self, bin_timestamp, raw_x, raw_y, raw_x2, raw_y2, angle, angle_well_1, angle_well_2,
+        pos, vel, pos_dec_rank, networkclient):
+        
         self.velocity = vel
         self.linearized_position = pos
         self.raw_x = raw_x
@@ -731,10 +899,53 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             pass
         #print('main pos/vel data',self.linearized_position,self.velocity,self.raw_x,self.raw_y)
 
+        if time.time() - self.head_direction_stim_time < self.head_direction_lockout_time:
+            return
+        
+        self.angle_buffer[1:] = self.angle_buffer[:-1]
+        self.angle_buffer[0] = angle
+        if None in self.angle_buffer: # not enough data yet, don't reward
+            return
+        is_within_angle_range = (
+            abs(max(self.angle_buffer) - min(self.angle_buffer)) <= self.within_angle_range)
+        
+        x = (raw_x + raw_x2) / 2
+        y = (raw_y + raw_y2) / 2
+        dist = np.sqrt( (x - self.center_well_pos[0])**2 + (y - self.center_well_pos[1])**2 )
+        is_in_center_well_proximity = dist <= self.max_center_well_dist_head
+
+        record_head_direction_stim = False
+        
+        # this will only work if the angles to the wells +/- the acceptable angle range
+        # do not overlap! otherwise we could end up with a situation where the animal's
+        # head direction is detected to be pointing to multiple wells
+        if (is_within_angle_range and is_in_center_well_proximity and
+            abs(angle - angle_well_1) <= self.to_well_angle_range):
+            
+            networkclient.send_statescript_shortcut_message(14)
+            self.class_log.info("Statescript trigger for well 1")
+            well = 1
+            record_head_direction_stim = True
+        if (is_within_angle_range and is_in_center_well_proximity and
+            abs(angle - angle_well_2) <= self.to_well_angle_range):
+
+            networkclient.send_statescript_shortcut_message(14)
+            self.class_log.info("Statescript trigger for well 2")
+            well = 2
+            record_head_direction_stim = True
+
+        if record_head_direction_stim:
+            self.write_record(
+                realtime_base.RecordIDs.STIM_HEAD_DIRECTION, bin_timestamp, well, raw_x, raw_y,
+                raw_x2, raw_y2, angle, angle_well_1, angle_well_2, self.to_well_angle_range,
+                self.within_angle_range, dist, self.max_center_well_dist_head, 
+                self.min_duration_head_angle, self.head_direction_lockout_time)
+        
+
     # MEC: this function sums the posterior during each ripple, then sends shortcut message
     # need to add location filter so it only sends message when rat is at rip/wait well - no, that is in statescript
     def posterior_sum(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, dec_rank, tet1,tet2,tet3,tet4,tet5,networkclient):
-        time = MPI.Wtime()
+        mpi_time = MPI.Wtime()
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
         self.box_post = box
@@ -1105,7 +1316,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         if (self._in_lockout and self.bin_timestamp_1 > (self._last_lockout_timestamp + self._lockout_time)):
             self._in_lockout = False
             self.write_record(realtime_base.RecordIDs.STIM_LOCKOUT,
-                              self.bin_timestamp, time, self._lockout_count, self._in_lockout,
+                              self.bin_timestamp, mpi_time, self._lockout_count, self._in_lockout,
                               0, self.big_rip_message_sent, self.spike_count)
             #print('non local event end. num:',self._lockout_count,'current',self.bin_timestamp_1,
             #    'last',self._last_lockout_timestamp,'lock time',self._lockout_time)
@@ -1114,208 +1325,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         elif not self._in_lockout:
             self.shortcut_message_sent = False
 
-
-class StimDeciderMPIRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, stim_decider: StimDecider, networkclient):
-        super(StimDeciderMPIRecvInterface, self).__init__(
-            comm=comm, rank=rank, config=config)
-
-        self.stim = stim_decider
-        self.networkclient = networkclient
-
-        self.mpi_status = MPI.Status()
-
-        self.feedback_bytes = bytearray(16)
-        self.timing_bytes = bytearray(100)
-
-        self.mpi_reqs = []
-        self.mpi_statuses = []
-
-        req_feedback = self.comm.Irecv(buf=self.feedback_bytes,
-                                       tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
-        self.mpi_statuses.append(MPI.Status())
-        self.mpi_reqs.append(req_feedback)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        rdy = MPI.Request.Testall(
-            requests=self.mpi_reqs, statuses=self.mpi_statuses)
-
-        if rdy:
-            if self.mpi_statuses[0].source in self.config['rank']['ripples']:
-                # MEC: we need to add ripple size to this messsage
-                message = ripple_process.RippleThresholdState.unpack(
-                    message_bytes=self.feedback_bytes)
-                self.stim.update_ripple_threshold_state(timestamp=message.timestamp,
-                                                        elec_grp_id=message.elec_grp_id,
-                                                        threshold_state=message.threshold_state,
-                                                        conditioning_thresh_state=message.conditioning_thresh_state,
-                                                        networkclient=self.networkclient)
-
-                self.mpi_reqs[0] = self.comm.Irecv(buf=self.feedback_bytes,
-                                                   tag=realtime_base.MPIMessageTag.FEEDBACK_DATA.value)
-
-
-class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, stim_decider: StimDecider, networkclient):
-        super(PosteriorSumRecvInterface, self).__init__(
-            comm=comm, rank=rank, config=config)
-
-        self.stim = stim_decider
-        self.networkclient = networkclient
-        # NOTE: if you dont know how large the buffer should be, set it to a large number
-        # then you will get an error saying what it should be set to
-        # bytearray was 80 before adding spike_count, 92 before adding rank
-        self.msg_buffer = bytearray(132)
-        self.req = self.comm.Irecv(
-            buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
-
-    def __next__(self):
-        rdy = self.req.Test()
-        time = MPI.Wtime()
-        if rdy:
-
-            message = decoder_process.PosteriorSum.unpack(self.msg_buffer)
-            self.req = self.comm.Irecv(
-                buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
-
-            # need to activate record_timing in this class if we want to use this here
-            # self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
-            #                   datatype=datatypes.Datatypes.SPIKES, label='post_sum_recv')
-
-            # okay so we are receiving the message! but now it needs to get into the stim decider
-            #print('posterior from decoder',message)
-            self.stim.posterior_sum(bin_timestamp=message.bin_timestamp, spike_timestamp=message.spike_timestamp,
-                                    target=message.target, offtarget=message.offtarget, box=message.box, arm1=message.arm1,
-                                    arm2=message.arm2, arm3=message.arm3, arm4=message.arm4, arm5=message.arm5,
-                                    arm6=message.arm6, arm7=message.arm7, arm8=message.arm8,
-                                    spike_count=message.spike_count, crit_ind=message.crit_ind,
-                                    posterior_max=message.posterior_max, dec_rank=message.rank, 
-                                    tet1=message.tet1,tet2=message.tet2,tet3=message.tet3,
-                                    tet4=message.tet4,tet5=message.tet5,
-                                    networkclient=self.networkclient)
-            #print('posterior sum message supervisor: ',message.spike_timestamp,time*1000)
-            # return posterior_sum
-
-        else:
-            return None
-
-
-class VelocityPositionRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, stim_decider: StimDecider, networkclient):
-        super(VelocityPositionRecvInterface, self).__init__(
-            comm=comm, rank=rank, config=config)
-
-        self.stim = stim_decider
-        self.networkclient = networkclient
-        # NOTE: if you dont know how large the buffer should be, set it to a large number
-        # then you will get an error saying what it should be set to
-        self.msg_buffer = bytearray(28)
-        self.req = self.comm.Irecv(
-            buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
-
-    def __next__(self):
-        rdy = self.req.Test()
-        time = MPI.Wtime()
-        if rdy:
-
-            message = decoder_process.VelocityPosition.unpack(self.msg_buffer)
-            self.req = self.comm.Irecv(
-                buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.VEL_POS.value)
-
-            # okay so we are receiving the message! but now it needs to get into the stim decider
-            self.stim.velocity_position(bin_timestamp=message.bin_timestamp, raw_x=message.raw_x,
-                raw_y=message.raw_y, pos=message.pos, vel=message.vel, pos_dec_rank=message.rank)
-            #print('posterior sum message supervisor: ',message.timestamp,time*1000)
-            # return posterior_sum
-
-        else:
-            return None
-
-
-class MainMPISendInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config):
-
-        super().__init__(comm=comm, rank=rank, config=config)
-
-    def send_num_ntrode(self, rank, num_ntrodes):
-        self.class_log.debug(
-            "Sending number of ntrodes to rank {:}".format(rank))
-        self.comm.send(realtime_base.NumTrodesMessage(num_ntrodes), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_channel_selection(self, rank, channel_selects):
-        #print('sending channel selection',rank,channel_selects)
-        # print('object',spykshrk.realtime.realtime_base.ChannelSelection(channel_selects))
-        self.comm.send(obj=realtime_base.ChannelSelection(channel_selects), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    # MEC added
-    def send_ripple_channel_selection(self, rank, channel_selects):
-        self.comm.send(obj=realtime_base.RippleChannelSelection(channel_selects), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_new_writer_message(self, rank, new_writer_message):
-        self.comm.send(obj=new_writer_message, dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_start_rec_message(self, rank):
-        self.comm.send(obj=realtime_base.StartRecordMessage(), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_turn_on_datastreams(self, rank):
-        self.comm.send(obj=realtime_base.TurnOnDataStream(), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_ripple_parameter(self, rank, param_message):
-        self.comm.send(obj=param_message, dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_ripple_baseline_mean(self, rank, mean_dict):
-        self.comm.send(obj=ripple_process.CustomRippleBaselineMeanMessage(mean_dict=mean_dict), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_ripple_baseline_std(self, rank, std_dict):
-        self.comm.send(obj=ripple_process.CustomRippleBaselineStdMessage(std_dict=std_dict), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_time_sync_simulator(self):
-        if self.config['datasource'] == 'trodes':
-            ranks = list(range(self.comm.size))
-            ranks.remove(self.rank)
-            for rank in ranks:
-                self.comm.send(obj=realtime_base.TimeSyncInit(), dest=rank,
-                               tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-        else:
-            self.comm.send(obj=realtime_base.TimeSyncInit(), dest=self.config['rank']['simulator'],
-                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def all_barrier(self):
-        self.comm.Barrier()
-
-    def send_time_sync_offset(self, rank, offset_time):
-        self.comm.send(obj=realtime_base.TimeSyncSetOffset(offset_time), dest=rank,
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def terminate_all(self):
-        terminate_ranks = list(range(self.comm.size))
-        terminate_ranks.remove(self.rank)
-        for rank in terminate_ranks:
-            self.comm.send(obj=realtime_base.TerminateMessage(), dest=rank,
-                           tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def send_setup_complete(self):
-        self.comm.send(obj=realtime_base.SetupComplete(),
-                       dest=self.config['rank']['gui'],
-                       tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-
 class MainSimulatorManager(rt_logging.LoggingClass):
 
-    def __init__(self, rank, config, parent: MainProcess, send_interface: MainMPISendInterface,
-                 stim_decider: StimDecider):
+    def __init__(self, rank, config, parent, send_interface, stim_decider):
 
         self.rank = rank
         self.config = config
@@ -1455,7 +1467,6 @@ class MainSimulatorManager(rt_logging.LoggingClass):
         for dec_rank in self.config['rank']['decoder']:
             self.send_interface.send_channel_selection(dec_rank, trode_list)
 
-
     def _writer_startup(self):
         # Update binary_record file writers before starting datastream
         for rec_rank in self.config['rank_settings']['enable_rec']:
@@ -1526,7 +1537,6 @@ class MainSimulatorManager(rt_logging.LoggingClass):
 
     def trigger_termination(self):
         self.send_interface.terminate_all()
-
         self.parent.trigger_termination()
 
     def update_all_rank_setup_status(self, rank):
@@ -1536,68 +1546,133 @@ class MainSimulatorManager(rt_logging.LoggingClass):
             self.class_log.debug(f"Received from {self.set_up_ranks}, expected {self.ranks_sending_recs}")
 
 
-class MainSimulatorMPIRecvInterface(realtime_base.RealtimeMPIClass):
+##########################################################################
+# Process
+##########################################################################
+class MainProcess(realtime_base.RealtimeProcess):
 
-    def __init__(self, comm: MPI.Comm, rank, config, main_manager: MainSimulatorManager):
+    def __init__(self, comm: MPI.Comm, rank, config):
+
+        self.comm = comm    # type: MPI.Comm
+        self.rank = rank
+        self.config = config
+
         super().__init__(comm=comm, rank=rank, config=config)
-        self.main_manager = main_manager
+
+        # MEC added
+        self.stim_decider_send_interface = StimDeciderMPISendInterface(
+            comm=comm, rank=rank, config=config)
+
+        self.stim_decider = StimDecider(rank=rank, config=config,
+                                        send_interface=self.stim_decider_send_interface)
+
+        # self.posterior_recv_interface = PosteriorSumRecvInterface(comm=comm, rank=rank, config=config,
+        #                                                          stim_decider=self.stim_decider)
+
+        # self.stim_decider = StimDecider(rank=rank, config=config,
+        #                                send_interface=StimDeciderMPISendInterface(comm=comm,
+        #                                                                           rank=rank,
+        #                                                                           config=config))
+
+        # self.data_recv = StimDeciderMPIRecvInterface(comm=comm, rank=rank, config=config,
+        #                                             stim_decider=self.stim_decider)
+
+        self.send_interface = MainMPISendInterface(
+            comm=comm, rank=rank, config=config)
+
+        self.manager = MainSimulatorManager(rank=rank, config=config, parent=self, send_interface=self.send_interface,
+                                            stim_decider=self.stim_decider)
+        print('======================================')
+        print('In MainProcess: datasource = ', config['datasource'])
+        print('======================================')
+        if config['datasource'] == 'trodes':
+            # print('about to configure trdoes network for tetrode: ',
+            #       self.manager.handle_ntrode_list, self.rank)
+            # time.sleep(5+1*self.rank)
+
+            # self.networkclient = MainProcessClient(
+            #     "SpykshrkMainProc", config['trodes_network']['address'], config['trodes_network']['port'], self.config)
+            # if self.networkclient.initialize() != 0:
+            #     print("Network could not successfully initialize")
+            #     del self.networkclient
+            #     quit()
+            # # added MEC
+            # self.networkclient.initializeHardwareConnection()
+            # self.networkclient.registerStartupCallback(
+            #     self.manager.handle_ntrode_list)
+            # # added MEC
+            # self.networkclient.registerStartupCallbackRippleTetrodes(
+            #     self.manager.handle_ripple_ntrode_list)
+            # self.networkclient.registerTerminationCallback(
+            #     self.manager.trigger_termination)
+            # print('completed trodes setup')
+
+            #############################################################
+            self.networkclient = MainProcessClient(config, self.manager)
+            #############################################################
+
+        self.vel_pos_recv_interface = VelocityPositionRecvInterface(comm=comm, rank=rank, config=config,
+                                                                    stim_decider=self.stim_decider,
+                                                                    networkclient=self.networkclient)
+
+        self.posterior_recv_interface = PosteriorSumRecvInterface(comm=comm, rank=rank, config=config,
+                                                                  stim_decider=self.stim_decider,
+                                                                  networkclient=self.networkclient)
+
+        self.data_recv = StimDeciderMPIRecvInterface(comm=comm, rank=rank, config=config,
+                                                     stim_decider=self.stim_decider, networkclient=self.networkclient)
+
+        self.recv_interface = MainSimulatorMPIRecvInterface(comm=comm, rank=rank,
+                                                            config=config, main_manager=self.manager)
+
+        self.gui_recv = MainGuiRecvInterface(comm, rank, config, self.stim_decider)
+
+        self.terminate = False
 
         self.mpi_status = MPI.Status()
 
-        self.req_cmd = self.comm.irecv(
-            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+        self.started = False
 
-    def __iter__(self):
-        return self
+        # First Barrier to finish setting up nodes, waiting for Simulator to send ntrode list.
+        # The main loop must be active to receive binary record registration messages, so the
+        # first Barrier is placed here.
+        self.class_log.debug("First Barrier")
+        self.send_interface.all_barrier()
+        self.class_log.debug("Past First Barrier")
 
-    def __next__(self):
+    def trigger_termination(self):
+        self.terminate = True
 
-        (req_rdy, msg) = self.req_cmd.test(status=self.mpi_status)
+    def main_loop(self):
+        # self.thread.start()
 
-        if req_rdy:
-            self.process_request_message(msg)
+        check_user_input = True
 
-            self.req_cmd = self.comm.irecv(
-                tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+        # Synchronize rank times immediately
+        last_time_bin = int(time.time())
 
-    def process_request_message(self, message):
+        while not self.terminate:
 
-        if isinstance(message, simulator_process.SimTrodeListMessage):
-            self.main_manager.handle_ntrode_list(message.trode_list)
-            print('decoding tetrodes message', message.trode_list)
+                # Synchronize rank times
+                if self.manager.time_sync_on:
+                    current_time_bin = int(time.time())
+                    if current_time_bin >= last_time_bin + 10:
+                        self.manager.synchronize_time()
+                        last_time_bin = current_time_bin
 
-        # MEC added
-        if isinstance(message, simulator_process.RippleTrodeListMessage):
-            self.main_manager.handle_ripple_ntrode_list(
-                message.ripple_trode_list)
-            print('ripple tetrodes message', message.ripple_trode_list)
+                self.recv_interface.__next__()
+                self.data_recv.__next__()
+                self.vel_pos_recv_interface.__next__()
+                self.posterior_recv_interface.__next__()
+                self.networkclient.__next__()
+                self.gui_recv.__next__()
 
-        elif isinstance(message, binary_record.BinaryRecordTypeMessage):
-            self.class_log.debug("BinaryRecordTypeMessage received for rec id {} from rank {}".
-                                 format(message.rec_id, self.mpi_status.source))
-            self.main_manager.register_rec_type_message(message)
+                if check_user_input and self.manager.all_ranks_set_up:
+                    print("***************************************", flush=True)
+                    print("   All ranks are set up, ok to start   ", flush=True)
+                    print("***************************************", flush=True)
+                    self.send_interface.send_setup_complete()
+                    self.class_log.debug("Notified GUI that setup was complete")
+                    check_user_input = False
 
-        elif isinstance(message, realtime_base.TimeSyncReport):
-            self.main_manager.send_calc_offset_time(
-                self.mpi_status.source, message.time)
-
-        elif isinstance(message, realtime_base.TerminateMessage):
-            self.class_log.info('Received TerminateMessage from rank {:}, now terminating all.'.
-                                format(self.mpi_status.source))
-
-            self.main_manager.trigger_termination()
-
-        elif isinstance(message, realtime_base.BinaryRecordSendComplete):
-            self.main_manager.update_all_rank_setup_status(self.mpi_status.source)
-
-class MainGuiRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, stim_decider:StimDecider):
-        super().__init__(comm=comm, rank=rank, config=config)
-        self.stim_decider = stim_decider
-        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.stim_decider.process_gui_request_message(msg)
-            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+        self.class_log.info("Main Process Main reached end, exiting.")
