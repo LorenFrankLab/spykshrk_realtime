@@ -66,6 +66,9 @@ class NoSpikeTimerThread(Thread):
           else:
             print('initial spike from manager:',self.spike_sent)
 
+##########################################################################
+# Messages
+##########################################################################
 class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
 
     _header_byte_fmt = '=qidqi'
@@ -105,6 +108,9 @@ class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
                    current_pos=current_pos, cred_int=cred_int, pos_hist=pos_hist)
 
 
+##########################################################################
+# Interfaces
+##########################################################################
 class EncoderMPISendInterface(realtime_base.RealtimeMPIClass):
     def __init__(self, comm: MPI.Comm, rank, config):
         super(EncoderMPISendInterface, self).__init__(comm=comm, rank=rank, config=config)
@@ -141,6 +147,70 @@ class EncoderMPISendInterface(realtime_base.RealtimeMPIClass):
         self.comm.Barrier()
 
 
+class EncoderMPIRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, encoder_manager):
+        super(EncoderMPIRecvInterface, self).__init__(comm=comm, rank=rank, config=config)
+        self.enc_man = encoder_manager
+
+        self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.process_request_message(msg)
+
+            self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
+
+    def process_request_message(self, message):
+
+        if isinstance(message, realtime_base.TerminateMessage):
+            self.class_log.debug("Received TerminateMessage")
+            raise StopIteration()
+
+        elif isinstance(message, realtime_base.NumTrodesMessage):
+            self.class_log.debug("Received number of NTrodes Message.")
+            self.enc_man.set_num_trodes(message)
+
+        elif isinstance(message, ChannelSelection):
+            self.class_log.debug("Received NTrode channel selection {:}.".format(message.ntrode_list))
+            self.enc_man.select_ntrodes(message.ntrode_list)
+
+        elif isinstance(message, TurnOnDataStream):
+            self.class_log.debug("Turn on data stream")
+            self.enc_man.turn_on_datastreams()
+
+        elif isinstance(message, binary_record.BinaryRecordCreateMessage):
+            self.enc_man.set_record_writer_from_message(message)
+
+        elif isinstance(message, realtime_base.TimeSyncInit):
+            self.enc_man.sync_time()
+
+        elif isinstance(message, realtime_base.TimeSyncSetOffset):
+            self.enc_man.update_offset(message.offset_time)
+
+        elif isinstance(message, realtime_base.StartRecordMessage):
+            self.enc_man.start_record_writing()
+
+        elif isinstance(message, realtime_base.StopRecordMessage):
+            self.enc_man.stop_record_writing()
+
+
+class EncoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, encoder_manager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.encoder_manager = encoder_manager
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.encoder_manager.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+
+##########################################################################
+# Data handlers/managers
+##########################################################################
 class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
     def __init__(self, rank, config, local_rec_manager, send_interface: EncoderMPISendInterface,
@@ -501,54 +571,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
             self.class_log.debug(f"Received message of unknown type {type(message)}, ignoring")
 
 
-class EncoderMPIRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, encoder_manager: RStarEncoderManager):
-        super(EncoderMPIRecvInterface, self).__init__(comm=comm, rank=rank, config=config)
-        self.enc_man = encoder_manager
-
-        self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.process_request_message(msg)
-
-            self.req = self.comm.irecv(tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
-
-    def process_request_message(self, message):
-
-        if isinstance(message, realtime_base.TerminateMessage):
-            self.class_log.debug("Received TerminateMessage")
-            raise StopIteration()
-
-        elif isinstance(message, realtime_base.NumTrodesMessage):
-            self.class_log.debug("Received number of NTrodes Message.")
-            self.enc_man.set_num_trodes(message)
-
-        elif isinstance(message, ChannelSelection):
-            self.class_log.debug("Received NTrode channel selection {:}.".format(message.ntrode_list))
-            self.enc_man.select_ntrodes(message.ntrode_list)
-
-        elif isinstance(message, TurnOnDataStream):
-            self.class_log.debug("Turn on data stream")
-            self.enc_man.turn_on_datastreams()
-
-        elif isinstance(message, binary_record.BinaryRecordCreateMessage):
-            self.enc_man.set_record_writer_from_message(message)
-
-        elif isinstance(message, realtime_base.TimeSyncInit):
-            self.enc_man.sync_time()
-
-        elif isinstance(message, realtime_base.TimeSyncSetOffset):
-            self.enc_man.update_offset(message.offset_time)
-
-        elif isinstance(message, realtime_base.StartRecordMessage):
-            self.enc_man.start_record_writing()
-
-        elif isinstance(message, realtime_base.StopRecordMessage):
-            self.enc_man.stop_record_writing()
-
-
+##########################################################################
+# Process
+##########################################################################
 class EncoderProcess(realtime_base.RealtimeProcess):
     def __init__(self, comm: MPI.Comm, rank, config):
 
@@ -624,15 +649,3 @@ class EncoderProcess(realtime_base.RealtimeProcess):
 
         self.enc_man.stopFlag.set()
         self.class_log.info("Encoding Process reached end, exiting.")
-
-class EncoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, encoder_manager):
-        super().__init__(comm=comm, rank=rank, config=config)
-        self.encoder_manager = encoder_manager
-        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.encoder_manager.process_gui_request_message(msg)
-            self.req = self.comm.irecv(source=self.config["rank"]["gui"])

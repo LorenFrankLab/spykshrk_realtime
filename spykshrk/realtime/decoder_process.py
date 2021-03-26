@@ -22,6 +22,9 @@ from spykshrk.realtime.realtime_base import BinaryRecordSendComplete, MPIMessage
 from spykshrk.realtime.gui_process import GuiDecoderParameterMessage
 
 
+##########################################################################
+# Messages
+##########################################################################
 class PosteriorSum(rt_logging.PrintableMessage):
     """"Message containing summed posterior from decoder_process.
 
@@ -104,6 +107,9 @@ class VelocityPosition(rt_logging.PrintableMessage):
                    angle_well_2=angle_well_2, pos=pos, vel=vel, rank=rank)
 
 
+##########################################################################
+# Interfaces
+##########################################################################
 class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
     def __init__(self, comm: MPI.Comm, rank, config):
         super(DecoderMPISendInterface, self).__init__(
@@ -151,6 +157,67 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
         self.comm.Barrier()
 
 
+class DecoderGuiSendInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config):
+        super().__init__(comm, rank, config)
+        self.buf = np.zeros(self.config["encoder"]["position"]["bins"])
+
+    def send_posterior(self, data):
+        self.comm.Send(
+            buf=data,
+            dest=self.config["rank"]["gui"],
+            tag=MPIMessageTag.DATA_FOR_GUI)
+
+
+class DecoderRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, decode_manager):
+        super(DecoderRecvInterface, self).__init__(
+            comm=comm, rank=rank, config=config)
+
+        self.dec_man = decode_manager
+
+        self.req = self.comm.irecv(
+            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.process_request_message(msg)
+
+            self.req = self.comm.irecv(
+                tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
+
+    def process_request_message(self, message):
+        if isinstance(message, realtime_base.TerminateMessage):
+            self.class_log.debug("Received TerminateMessage")
+            raise StopIteration()
+
+        elif isinstance(message, binary_record.BinaryRecordCreateMessage):
+            self.dec_man.set_record_writer_from_message(message)
+
+        elif isinstance(message, realtime_base.ChannelSelection):
+            self.class_log.debug(
+                "Received NTrode channel selection {:}.".format(message.ntrode_list))
+            self.dec_man.select_ntrodes(message.ntrode_list)
+
+        elif isinstance(message, realtime_base.TimeSyncInit):
+            self.class_log.debug("Received TimeSyncInit.")
+            self.dec_man.sync_time()
+
+        elif isinstance(message, realtime_base.TurnOnDataStream):
+            self.class_log.debug("Turn on data stream")
+            self.dec_man.turn_on_datastreams()
+
+        elif isinstance(message, realtime_base.TimeSyncSetOffset):
+            self.dec_man.update_offset(message.offset_time)
+
+        elif isinstance(message, realtime_base.StartRecordMessage):
+            self.dec_man.start_record_writing()
+
+        elif isinstance(message, realtime_base.StopRecordMessage):
+            self.dec_man.stop_record_writing()
+
+
 class SpikeDecodeRecvInterface(realtime_base.RealtimeMPIClass):
     def __init__(self, comm: MPI.Comm, rank, config):
         super(SpikeDecodeRecvInterface, self).__init__(
@@ -175,11 +242,10 @@ class SpikeDecodeRecvInterface(realtime_base.RealtimeMPIClass):
         else:
             return None
 
+
 # make receiver to take in threshold message from ripple node - use same setup as in main_process
-# to use this LFP timekeeper compare the timestamp of the lfp message to the timestamp of the last spike
-# if greter than 5 msec then trigger calcuating the posterior
-
-
+# to use this LFP timekeeper, compare the timestamp of the lfp message to the timestamp of the last spike.
+# if greater than 5 msec then trigger calcuating the posterior
 class LFPTimekeeperRecvInterface(realtime_base.RealtimeMPIClass):
     def __init__(self, comm: MPI.Comm, rank, config):
         super(LFPTimekeeperRecvInterface, self).__init__(
@@ -219,18 +285,23 @@ class LFPTimekeeperRecvInterface(realtime_base.RealtimeMPIClass):
             else:
                 return None
 
-class DecoderGuiSendInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config):
-        super().__init__(comm, rank, config)
-        self.buf = np.zeros(self.config["encoder"]["position"]["bins"])
-        self.req = None
 
-    def send_posterior(self, data):
-        self.comm.Send(
-            buf=data,
-            dest=self.config["rank"]["gui"],
-            tag=MPIMessageTag.DATA_FOR_GUI)
+class DecoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
+    def __init__(self, comm: MPI.Comm, rank, config, pp_manager):
+        super().__init__(comm=comm, rank=rank, config=config)
+        self.pp_manager = pp_manager
+        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
 
+    def __next__(self):
+        rdy, msg = self.req.test()
+        if rdy:
+            self.pp_manager.process_gui_request_message(msg)
+            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
+
+
+##########################################################################
+# Data handlers/managers
+##########################################################################
 class PointProcessDecoder(rt_logging.LoggingClass):
 
     def __init__(self, pos_range, pos_bins, time_bin_size, arm_coor, config, rank, uniform_gain=0.01):
@@ -1359,55 +1430,9 @@ class BayesianDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # self.class_log.debug(spike_dec_msg)
 
 
-class DecoderRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, decode_manager: BayesianDecodeManager):
-        super(DecoderRecvInterface, self).__init__(
-            comm=comm, rank=rank, config=config)
-
-        self.dec_man = decode_manager
-
-        self.req = self.comm.irecv(
-            tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.process_request_message(msg)
-
-            self.req = self.comm.irecv(
-                tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE)
-
-    def process_request_message(self, message):
-        if isinstance(message, realtime_base.TerminateMessage):
-            self.class_log.debug("Received TerminateMessage")
-            raise StopIteration()
-
-        elif isinstance(message, binary_record.BinaryRecordCreateMessage):
-            self.dec_man.set_record_writer_from_message(message)
-
-        elif isinstance(message, realtime_base.ChannelSelection):
-            self.class_log.debug(
-                "Received NTrode channel selection {:}.".format(message.ntrode_list))
-            self.dec_man.select_ntrodes(message.ntrode_list)
-
-        elif isinstance(message, realtime_base.TimeSyncInit):
-            self.class_log.debug("Received TimeSyncInit.")
-            self.dec_man.sync_time()
-
-        elif isinstance(message, realtime_base.TurnOnDataStream):
-            self.class_log.debug("Turn on data stream")
-            self.dec_man.turn_on_datastreams()
-
-        elif isinstance(message, realtime_base.TimeSyncSetOffset):
-            self.dec_man.update_offset(message.offset_time)
-
-        elif isinstance(message, realtime_base.StartRecordMessage):
-            self.dec_man.start_record_writing()
-
-        elif isinstance(message, realtime_base.StopRecordMessage):
-            self.dec_man.stop_record_writing()
-
-
+##########################################################################
+# Process
+##########################################################################
 class DecoderProcess(realtime_base.RealtimeProcess):
     def __init__(self, comm: MPI.Comm, rank, config):
         super(DecoderProcess, self).__init__(
@@ -1495,15 +1520,3 @@ class DecoderProcess(realtime_base.RealtimeProcess):
 
         # can try to save firing rate dict to a json file here
         self.class_log.info("Decoding Process reached end, exiting.")
-
-class DecoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
-    def __init__(self, comm: MPI.Comm, rank, config, pp_manager:PPDecodeManager):
-        super().__init__(comm=comm, rank=rank, config=config)
-        self.pp_manager = pp_manager
-        self.req = self.comm.irecv(source=self.config["rank"]["gui"])
-
-    def __next__(self):
-        rdy, msg = self.req.test()
-        if rdy:
-            self.pp_manager.process_gui_request_message(msg)
-            self.req = self.comm.irecv(source=self.config["rank"]["gui"])
