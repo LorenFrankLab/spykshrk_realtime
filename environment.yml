@@ -16,3 +16,12 @@ dependencies:
   - scipy
   - loren_frank_data_processing
   - ipyparallel
+  - pyzmq
+  - msgpack-python
+  - pyqt
+  - seaborn
+  - pyqtgraph
+  - python
+  - pip
+  - pip:
+      - trodesnetwork
