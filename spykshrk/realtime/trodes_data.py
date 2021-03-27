@@ -1,23 +1,11 @@
 from zmq import ZMQError
 import numpy as np
-import xml.etree.ElementTree as ET
 
+from spykshrk.realtime import utils
 from spykshrk.realtime.datatypes import Datatypes
 from spykshrk.realtime.realtime_base import DataSourceReceiver
 from spykshrk.realtime.datatypes import LFPPoint, SpikePoint, CameraModulePoint
 from trodesnetwork.socket import SourceSubscriber
-
-def get_ntrode_inds(config, ntrode_ids):
-    # ntrode_ids should be a list of integers
-    inds_to_extract = []
-    xmltree = ET.parse(config["trodes"]["config_file"])
-    root = xmltree.getroot()
-    for ii, ntrode in enumerate(root.iter("SpikeNTrode")):
-        ntid = int(ntrode.get("id"))
-        if ntid in ntrode_ids:
-            inds_to_extract.append(ii)
-
-    return inds_to_extract
 
 class TrodesNetworkDataReceiver(DataSourceReceiver):
     def __init__(self, comm, rank, config, datatype):
@@ -118,23 +106,25 @@ class TrodesNetworkDataReceiver(DataSourceReceiver):
             return
         
         if self.datatype == Datatypes.LFP:
-            self.inds_to_extract = get_ntrode_inds(self.config, self.ntrode_ids)
+            self.inds_to_extract = utils.get_ntrode_inds(self.config, self.ntrode_ids)
 
         self.class_log.debug(
             f"Set up to stream from ntrode ids {self.ntrode_ids}")
 
     def start_all_streams(self):
-        address = self.config["trodes_network"]["address"]
-        port = self.config["trodes_network"]["port"]
-        server_address = address + ":" + str(port)
-        
         if self.datatype == Datatypes.LFP:
-            self.sub_obj = SourceSubscriber('source.lfp', server_address=server_address)
+            name = 'source.lfp'
         elif self.datatype == Datatypes.SPIKES:
-            self.sub_obj = SourceSubscriber('source.waveforms', server_address=server_address)
+            name = 'source.waveforms'
         else:
-            self.sub_obj = SourceSubscriber('source.position', server_address=server_address)
-        
+            name = 'source.position'
+
+        server_address = utils.get_network_address(self.config)
+        if server_address is None:
+            self.sub_obj = SourceSubscriber(name)
+        else:
+            self.sub_obj = SourceSubscriber(name, server_address=server_address)
+
         self.start = True
         self.class_log.debug("Datastream activated")
 
