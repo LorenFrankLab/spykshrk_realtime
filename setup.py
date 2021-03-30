@@ -24,4 +24,5 @@ setup (name = 'spykshrk_realtime',
        ext_modules = cythonize(extensions, compiler_directives={'linetrace': True}),
        packages=find_packages('./'),
        package_dir={'spykshrk':'./spykshrk'},
-       install_requires=['scipy', 'iPython','mpi4py', 'numpy', 'Cython', 'pandas'])
+       install_requires=['scipy', 'iPython','mpi4py', 'numpy', 'Cython', 'pandas',
+                         'trodesnetwork', 'seaborn', 'pyqtgraph', 'matplotlib'])
