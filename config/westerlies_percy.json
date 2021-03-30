@@ -65,6 +65,19 @@
 
     "reward_mode" : "replay",
 
+    "camera" :{
+        "frame_rate": 30
+    },
+
+    "head_direction": {
+        "min_duration": 2,
+        "well_angle_range": 15,
+        "within_angle_range": 10,
+        "max_center_well_dist": 15,
+        "well_pos": [[928.895, 255.175], [301.263, 277.608]],
+        "lockout_time": 2
+    },
+
     "ripple": {
         "RippleParameterMessage": {
             "rip_coeff1": 1.2,
@@ -131,7 +144,7 @@
             "lower": -1024,
             "upper": 1024,
             "interval": 1,
-            "enable_filter": 0,
+            "enable_filter": 1,
             "n_std": 1,
             "n_marks_min": 30
         },
@@ -173,7 +186,7 @@
         "trans_mat_uniform_gain": 1,
         "trans_mat_smoother_std": 3,
         "circle_buffer": 1000,
-        "bin_delay": 3
+        "bin_delay": 1
     },
 
     "trodes_network": {

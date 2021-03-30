@@ -16,7 +16,7 @@
     },
 
     "tetrode_split": {
-        "1st_half": [1],
+        "1st_half": [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60],
         "2nd_half": []
     },
 
@@ -65,6 +65,19 @@
 
     "reward_mode" : "replay",
 
+    "camera" :{
+        "frame_rate": 30
+    },
+
+    "head_direction": {
+        "min_duration": 2,
+        "well_angle_range": 15,
+        "within_angle_range": 10,
+        "max_center_well_dist": 15,
+        "well_pos": [[928.895, 255.175], [301.263, 277.608]],
+        "lockout_time": 2
+    },
+    
     "ripple": {
         "RippleParameterMessage": {
             "rip_coeff1": 1.2,
@@ -103,7 +116,7 @@
             "lower": -1024,
             "upper": 1024,
             "interval": 1,
-            "enable_filter": 0,
+            "enable_filter": 1,
             "n_std": 1,
             "n_marks_min": 30
         },
@@ -118,8 +131,8 @@
         "position_kernel": {
             "std": 5
         },
-        "vel": 10,
-        "spk_amp": 150,
+        "vel": 0,
+        "spk_amp": 100,
         "noise_max_amp": 1500,
         "dead_channels": {
             "7": 3,
