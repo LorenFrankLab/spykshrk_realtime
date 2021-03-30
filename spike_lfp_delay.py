@@ -21,6 +21,7 @@ from spykshrk.realtime.datatypes import Datatypes
 class TriggerClient(object):
     def __init__(self, stub, config):
         server_address = utils.get_network_address(config)
+        print(f"Server address: {server_address}")
         self.acq_sub = tn.TrodesAcquisitionSubscriber(server_address=server_address)
         self.stub = stub
         self.started = False
