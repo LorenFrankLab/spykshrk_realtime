@@ -371,7 +371,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 channel_peaks = np.max(spike_data, axis=1)
                 peak_channel_ind = np.argmax(channel_peaks)
                 t_ind = np.argmax(spike_data[peak_channel_ind])
-                amp_marks = spikes[:, t_ind]
+                amp_marks = spike_data[:, t_ind]
                 #print('new mark',amp_marks)
 
                 # test multiple dead channls - great it works!

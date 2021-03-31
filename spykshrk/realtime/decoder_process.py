@@ -675,6 +675,8 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         # we can save the no spike likelihood here
         # QUESTION: what happens to the likelihood and the posterior during long times of no spike??
 
+        return self.posterior, self.likelihood
+
     # original version
     def increment_bin(self):
 
@@ -756,7 +758,9 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         self.tetrodes_with_spikes = np.zeros(
             (1, len(self.ntrode_list)), dtype=np.bool)
 
-    def calculate_posterior_arm_sum(self):
+        return self.posterior, self.likelihood
+
+    def calculate_posterior_arm_sum(self, posterior):
 
         # calculate the sum of the decode for each arm (box, then arms 1-8)
         # posterior is just an array 136 items long, so this should work
@@ -767,13 +771,13 @@ class PointProcessDecoder(rt_logging.LoggingClass):
         #print('zeros shape: ',self.posterior_sum_result)
 
         for region_ind, (start_ind, stop_ind) in enumerate(self.arm_coords):
-            posterior_sum_result[0,region_ind] = self.posterior[start_ind:stop_ind + 1].sum()
+            posterior_sum_result[0,region_ind] = posterior[start_ind:stop_ind + 1].sum()
             # print(self.posterior_sum_result)
             #print('whole posterior sum',posterior.sum())
         # posterior sum vector seems good - always adds to 1
         # yes, i can find a ripple that doesnt sum to 1, but this line didnt display anything
-        if self.posterior_sum_result.sum() < 0.99:
-            print('posterior sum vector sum', self.posterior_sum_result.sum())
+        if posterior_sum_result.sum() < 0.99:
+            print('posterior sum vector sum', posterior_sum_result.sum())
         # print('posterior',posterior)
 
         return posterior_sum_result
@@ -932,7 +936,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
     def update_posterior_stats(self):
 
         # calculate arm sum, max, and cred interval
-        self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum()
+        self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(self.posterior)
 
         # add credible interval here and add to message
         self.spxx = np.sort(self.posterior)[::-1]
@@ -979,7 +983,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # about to overwrite circular buffer from beginning so update stats
             if self.decoded_spike_counter > 0 and self.buff_ind == 0:
                 # count number of 0's in last column, add this to dropped spike count
-                self.dropped_spikes += (self.spike_buffer_size - self.decoded_spike_array[:,-1].sum())
+                self.dropped_spikes += (self.spike_buffer_size - np.sum(self.decoded_spike_array[:,-1], dtype=int))
                 # NOTE: we are not yet saving the dropped spikes!
                 # can put dan's saving function here and loop through all the dropped spikes - too slow??
                 missed_spike_array = self.decoded_spike_array[self.decoded_spike_array[:,-1] == 0]
@@ -1036,7 +1040,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 np.argwhere(
                     np.logical_and(
                         self.decoded_spike_array[:, 0] >= self.decoder_timestamp - self.decoder_bin_delay*self.time_bin_size,
-                        self.decoded_spike_array[:, 0] < self.decoder_timestamp - (self.decoder_bins_delay-1)*self.time_bin_size
+                        self.decoded_spike_array[:, 0] < self.decoder_timestamp - (self.decoder_bin_delay-1)*self.time_bin_size
                     )
                 ).squeeze())
             if spike_inds.shape[0] > 0:
@@ -1089,7 +1093,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     #print(self.enc_cred_int_array)
 
                     # run increment bin: to calculate like and posterior
-                    self.pp_decoder.increment_bin()
+                    self.posterior, self.likelihood = self.pp_decoder.increment_bin()
 
                     self.record_posterior_completed()
 
@@ -1102,7 +1106,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.spike_timestamp = 0
 
                     # run increment no spike
-                    self.pp_decoder.increment_no_spike_bin()    
+                    self.posterior, self.likelihood = self.pp_decoder.increment_no_spike_bin()    
 
             # no spikes in time bin of interest
             elif spike_inds.shape[0] == 0:
@@ -1111,7 +1115,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.spike_timestamp = 0
 
                 # run increment no spike
-                self.pp_decoder.increment_no_spike_bin()
+                self.posterior, self.likelihood = self.pp_decoder.increment_no_spike_bin()
 
             self.update_posterior_stats()
             self.mpi_send.send_posterior_message(self.decoder_timestamp - self.decoder_bin_delay * self.time_bin_size,
@@ -1143,10 +1147,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                               self.posterior_arm_sum[0][2], self.posterior_arm_sum[0][3], self.posterior_arm_sum[0][4],
                               self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
                               self.posterior_arm_sum[0][8], self.crit_ind, self.rank,
-                              self.num_dropped_spikes, self.num_duplicate_spikes,
+                              self.dropped_spikes, self.duplicate_spikes,
                               *self.posterior)
 
-            self.gui_send_interface.send_posterior(posterior)           
+            self.gui_send_interface.send_posterior(self.posterior)           
 
         # position and velocity loop
         pos_msg = self.pos_interface.__next__()

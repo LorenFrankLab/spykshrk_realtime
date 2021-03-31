@@ -14,6 +14,7 @@ import spykshrk.realtime.realtime_logging as rt_logging
 import spykshrk.realtime.ripple_process as ripple_process
 import spykshrk.realtime.simulator.simulator_process as simulator_process
 import spykshrk.realtime.timing_system as timing_system
+import spykshrk.realtime.utils as utils
 from spykshrk.realtime.gui_process import GuiMainParameterMessage
 from mpi4py import MPI
 
@@ -396,9 +397,7 @@ class MainProcessClient(object):
         self.manager = manager
         self.started = False
 
-        address = self.config["trodes_network"]["address"]
-        port = self.config["trodes_network"]["port"]
-        server_address = address + ":" + str(port)
+        server_address = utils.get_network_address(config)
         self.acq_sub = TrodesAcquisitionSubscriber(server_address=server_address)
         self.trodes_hardware = TrodesHardware(server_address=server_address)
 
