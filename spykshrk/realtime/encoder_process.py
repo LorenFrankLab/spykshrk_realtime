@@ -344,13 +344,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 # first find dead channels from spykshrk config file and replace data with 0s (range: 0-3)
                 if str(datapoint.elec_grp_id) in self.config['encoder']['dead_channels']:
                     #print('dead channel',datapoint.elec_grp_id)
-                    dead_channel = self.config['encoder']['dead_channels'].get(str(datapoint.elec_grp_id))
+                    dead_channel = self.config['encoder']['dead_channels'][str(datapoint.elec_grp_id)]
                     if self.spk_counter == 1:
                         print('tetrode:',datapoint.elec_grp_id,'dead channel:',dead_channel)                    
                     #print('channel is',dead_channel)
                     #print('data is',datapoint.data[dead_channel])
                     # zero out dead channel
-                    datapoint.data[dead_channel] = datapoint.data[dead_channel]*0
+                    datapoint.data[dead_channel] = 0
                     #print('zeroed data is',datapoint.data[dead_channel])
                 #for key, value in self.config['encoder']['dead_channels'].items():
                 #    print('dead channel list',key,value)
@@ -367,26 +367,11 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #print('mark',amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3])
 
                 # new method - take 4 values from single bin with highest peak
-                max_0 = max(datapoint.data[0])
-                #print('zeroed max',max_0,datapoint.elec_grp_id)
-                max_1 = max(datapoint.data[1])
-                max_2 = max(datapoint.data[2])
-                max_3 = max(datapoint.data[3])
-                max_channel = np.argmax([max_0,max_1,max_2,max_3])
-
-                max_0_ind = np.argmax(datapoint.data[0])
-                max_1_ind = np.argmax(datapoint.data[1])
-                max_2_ind = np.argmax(datapoint.data[2])
-                max_3_ind = np.argmax(datapoint.data[3])
-
-                if max_channel == 0:
-                    amp_marks = [datapoint.data[0][max_0_ind],datapoint.data[1][max_0_ind],datapoint.data[2][max_0_ind],datapoint.data[3][max_0_ind]]
-                elif max_channel == 1:
-                    amp_marks = [datapoint.data[0][max_1_ind],datapoint.data[1][max_1_ind],datapoint.data[2][max_1_ind],datapoint.data[3][max_1_ind]]
-                elif max_channel == 2:
-                    amp_marks = [datapoint.data[0][max_2_ind],datapoint.data[1][max_2_ind],datapoint.data[2][max_2_ind],datapoint.data[3][max_2_ind]]
-                elif max_channel == 3:
-                    amp_marks = [datapoint.data[0][max_3_ind],datapoint.data[1][max_3_ind],datapoint.data[2][max_3_ind],datapoint.data[3][max_3_ind]]
+                spike_data = datapoint.data
+                channel_peaks = np.max(spike_data, axis=1)
+                peak_channel_ind = np.argmax(channel_peaks)
+                t_ind = np.argmax(spike_data[peak_channel_ind])
+                amp_marks = spikes[:, t_ind]
                 #print('new mark',amp_marks)
 
                 # test multiple dead channls - great it works!
