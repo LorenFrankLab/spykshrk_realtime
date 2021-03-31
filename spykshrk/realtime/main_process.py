@@ -581,7 +581,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_count_1 = 0
         self.enc_cred_int_array = np.zeros((5,self.post_sum_sliding_window))
         self.min_unique_tets = self.config['ripple_conditioning']['min_unique_tets']
-        self.max_center_well_dist =  self.config['ripple_conditioning']['center_well_dist']
+        self.max_center_well_dist =  self.config['ripple_conditioning']['max_center_well_dist']
         self.center_well_dist_cm = 0
 
         # for sum of posterior during whole ripple

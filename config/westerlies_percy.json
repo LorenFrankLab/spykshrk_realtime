@@ -55,7 +55,6 @@
         "shortcut_msg_lockout": 60000,
         "shortcut_msg_on" : true,
         "center_well_position": [638,648],
-        "center_well_dist": 15,
         "max_center_well_dist": 15,
         "enc_cred_int_max": 5,
         "min_unique_tets": 1,
