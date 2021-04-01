@@ -822,22 +822,18 @@ class RippleProcess(realtime_base.RealtimeProcess):
 
         self.gui_recv = RippleGuiRecvInterface(self.comm, self.rank, self.config, self.rip_man)
 
-        self.terminate = False
         # config['trodes_network']['networkobject'].registerTerminateCallback(self.trigger_termination)
 
         # First Barrier to finish setting up nodes
         self.class_log.debug("First Barrier")
         self.comm.Barrier()
 
-    def trigger_termination(self):
-        self.terminate = True
-
     def main_loop(self):
 
         self.rip_man.setup_mpi()
 
         try:
-            while not self.terminate:
+            while True:
                 self.mpi_recv.__next__()
                 self.rip_man.process_next_data()
                 self.gui_recv.__next__()

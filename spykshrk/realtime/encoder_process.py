@@ -289,9 +289,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
         # to turn on, uncomment the line, self.thread.start()
-        self.stopFlag = Event()
-        self.thread = NoSpikeTimerThread(self.stopFlag, self.spike_sent, self.mpi_send,
-                                        self.spike_timestamp, self.spike_elec_grp_id, self.current_pos, self.config)
+        # self.stopFlag = Event()
+        # self.thread = NoSpikeTimerThread(self.stopFlag, self.spike_sent, self.mpi_send,
+        #                                 self.spike_timestamp, self.spike_elec_grp_id, self.current_pos, self.config)
         #self.thread.start()
 
 
@@ -318,9 +318,6 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.class_log.info("Turn on datastreams.")
         self.spike_interface.start_all_streams()
         self.pos_interface.start_all_streams()
-
-    def trigger_termination(self):
-        self.spike_interface.stop_iterator()
 
     def process_next_data(self):
 
@@ -606,16 +603,11 @@ class EncoderProcess(realtime_base.RealtimeProcess):
 
         self.mpi_recv = EncoderMPIRecvInterface(comm=comm, rank=rank, config=config, encoder_manager=self.enc_man)
 
-        self.terminate = False
-
         # config['trodes_network']['networkobject'].registerTerminateCallback(self.trigger_termination)
 
         # First Barrier to finish setting up nodes
         self.class_log.debug("First Barrier")
         self.comm.Barrier()
-
-    def trigger_termination(self):
-        self.terminate = True
 
     def main_loop(self):
 
@@ -625,12 +617,12 @@ class EncoderProcess(realtime_base.RealtimeProcess):
         self.enc_man.register_pos_datatype()
 
         try:
-            while not self.terminate:
+            while True:
                 self.mpi_recv.__next__()
                 self.enc_man.process_next_data()
 
         except StopIteration as ex:
             self.class_log.info('Terminating EncodingProcess (rank: {:})'.format(self.rank))
 
-        self.enc_man.stopFlag.set()
+        # self.enc_man.stopFlag.set()
         self.class_log.info("Encoding Process reached end, exiting.")

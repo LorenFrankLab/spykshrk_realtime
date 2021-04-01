@@ -1342,7 +1342,6 @@ class DecoderProcess(realtime_base.RealtimeProcess):
         self.local_rec_manager = binary_record.RemoteBinaryRecordsManager(manager_label='state', local_rank=rank,
                                                                           manager_rank=config['rank']['supervisor'])
 
-        self.terminate = False
         self.main_loop_counter = 1
 
         self.mpi_send = DecoderMPISendInterface(
@@ -1391,16 +1390,13 @@ class DecoderProcess(realtime_base.RealtimeProcess):
         self.class_log.debug("First Barrier")
         self.comm.Barrier()
 
-    def trigger_termination(self):
-        self.terminate = True
-
     def main_loop(self):
 
         self.dec_man.setup_mpi()
         self.dec_man.register_pos_interface()
 
         try:
-            while not self.terminate:
+            while True:
                 #self.main_loop_counter += 1
                 # 1,000,000 is about every 2 sec
                 #if self.main_loop_counter % 100000 == 0:

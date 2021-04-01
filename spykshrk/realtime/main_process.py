@@ -1625,8 +1625,6 @@ class MainProcess(realtime_base.RealtimeProcess):
 
         self.gui_recv = MainGuiRecvInterface(comm, rank, config, self.stim_decider)
 
-        self.terminate = False
-
         self.mpi_status = MPI.Status()
 
         self.started = False
@@ -1639,7 +1637,7 @@ class MainProcess(realtime_base.RealtimeProcess):
         self.class_log.debug("Past First Barrier")
 
     def trigger_termination(self):
-        self.terminate = True
+        raise StopIteration()
 
     def main_loop(self):
         # self.thread.start()
@@ -1649,28 +1647,34 @@ class MainProcess(realtime_base.RealtimeProcess):
         # Synchronize rank times immediately
         last_time_bin = int(time.time())
 
-        while not self.terminate:
+        try:
 
-                # Synchronize rank times
-                if self.manager.time_sync_on:
-                    current_time_bin = int(time.time())
-                    if current_time_bin >= last_time_bin + 10:
-                        self.manager.synchronize_time()
-                        last_time_bin = current_time_bin
+            while True:
 
-                self.recv_interface.__next__()
-                self.data_recv.__next__()
-                self.vel_pos_recv_interface.__next__()
-                self.posterior_recv_interface.__next__()
-                self.networkclient.__next__()
-                self.gui_recv.__next__()
+                    # Synchronize rank times
+                    if self.manager.time_sync_on:
+                        current_time_bin = int(time.time())
+                        if current_time_bin >= last_time_bin + 10:
+                            self.manager.synchronize_time()
+                            last_time_bin = current_time_bin
 
-                if check_user_input and self.manager.all_ranks_set_up:
-                    print("***************************************", flush=True)
-                    print("   All ranks are set up, ok to start   ", flush=True)
-                    print("***************************************", flush=True)
-                    self.send_interface.send_setup_complete()
-                    self.class_log.debug("Notified GUI that setup was complete")
-                    check_user_input = False
+                    self.recv_interface.__next__()
+                    self.data_recv.__next__()
+                    self.vel_pos_recv_interface.__next__()
+                    self.posterior_recv_interface.__next__()
+                    self.networkclient.__next__()
+                    self.gui_recv.__next__()
+
+                    if check_user_input and self.manager.all_ranks_set_up:
+                        print("***************************************", flush=True)
+                        print("   All ranks are set up, ok to start   ", flush=True)
+                        print("***************************************", flush=True)
+                        self.send_interface.send_setup_complete()
+                        self.class_log.debug("Notified GUI that setup was complete")
+                        check_user_input = False
+
+        except StopIteration as ex:
+            self.class_log.info(
+                'Terminating MainProcess (rank: {:})'.format(self.rank))
 
         self.class_log.info("Main Process Main reached end, exiting.")
