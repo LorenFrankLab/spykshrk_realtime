@@ -1229,14 +1229,13 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_msg_counter % 15 == 0:
                   #if self.vel_pos_counter % 1000 == 0:
                       #print('thresh_counter: ',self.thresh_counter)
-                      with open('config/taskstate.txt') as taskState_file:
-                          fd = taskState_file.fileno()
-                          fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                          # read file
-                          for taskState_file_line in taskState_file:
-                              pass
-                          new_taskState = taskState_file_line
-                      self.taskState = np.int(new_taskState[0:1])
+                    with open('config/taskstate.txt', 'rb') as f:
+                        fd = f.fileno()
+                        fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                        f.seek(-2, os.SEEK_END)
+                        while f.read(1) != b'\n':
+                            f.seek(-2, os.SEEK_CUR)
+                        self.taskState = int(f.readline().decode()[0:1])
                       #print('taskState in decoder',self.taskState)
 
                 pass

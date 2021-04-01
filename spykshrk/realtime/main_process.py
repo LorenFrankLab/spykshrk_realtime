@@ -1031,14 +1031,13 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             #         'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
             ##############################################################
 
-            with open('config/taskstate.txt') as taskstate_file:
-                fd = taskstate_file.fileno()
+            with open('config/taskstate.txt', 'rb') as f:
+                fd = f.fileno()
                 fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                # read file
-                for taskstate_file_line in taskstate_file:
-                    pass
-                taskstate = taskstate_file_line
-            self.taskState = np.int(taskstate[0:1])
+                f.seek(-2, os.SEEK_END)
+                while f.read(1) != b'\n':
+                    f.seek(-2, os.SEEK_CUR)
+                self.taskState = int(f.readline().decode()[0:1])
             print('main taskState:',self.taskState)
 
         # to test shortcut message delay
