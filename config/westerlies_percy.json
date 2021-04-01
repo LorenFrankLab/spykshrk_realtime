@@ -22,7 +22,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "percy_1_16_run3_playback2",
+        "prefix": "percy_1_16_run3_playback3",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -37,11 +37,11 @@
     "ripple_conditioning": {
         "session_type": "run",
         "instructive": 0,
-        "posterior_sum_threshold": 0.5,
-        "second_post_sum_thresh": 0.5,
+        "posterior_sum_threshold": 0.4,
+        "second_post_sum_thresh": 0.4,
         "other_arm_threshold": 0.2,
         "posterior_sum_rip_only": false,
-        "post_sum_sliding_window": 7,
+        "post_sum_sliding_window": 6,
         "ripple_detect_velocity": 4,
         "spike_count_window_sec": 300,
         "previous_spike_count_avg": 1.312,
@@ -55,8 +55,7 @@
         "shortcut_msg_lockout": 60000,
         "shortcut_msg_on" : true,
         "center_well_position": [638,648],
-        "center_well_dist": 15,
-        "max_center_well_dist": 30,
+        "max_center_well_dist": 15,
         "enc_cred_int_max": 5,
         "min_unique_tets": 1,
         "ripple_lockout": 3000,
@@ -64,6 +63,19 @@
     },
 
     "reward_mode" : "replay",
+
+    "camera" :{
+        "frame_rate": 30
+    },
+
+    "head_direction": {
+        "min_duration": 2,
+        "well_angle_range": 15,
+        "within_angle_range": 10,
+        "max_center_well_dist": 15,
+        "well_pos": [[928.895, 255.175], [301.263, 277.608]],
+        "lockout_time": 2
+    },
 
     "ripple": {
         "RippleParameterMessage": {
@@ -131,9 +143,9 @@
             "lower": -1024,
             "upper": 1024,
             "interval": 1,
-            "enable_filter": 0,
+            "enable_filter": 1,
             "n_std": 1,
-            "n_marks_min": 30
+            "n_marks_min": 10
         },
         "RStar_edge_length_factor": 6,
 
@@ -177,8 +189,6 @@
     },
 
     "trodes_network": {
-        "address":"tcp://127.0.0.1",
-        "port":49152,
         "decoding_tetrodes": [1,8, 6, 15, 18, 28, 29, 31, 34, 36, 44, 46, 47, 51, 61, 48,54,59],
         "ripple_tetrodes": [1, 6, 15, 18]
     }

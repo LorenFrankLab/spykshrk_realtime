@@ -154,6 +154,9 @@ class Dialog(QDialog):
         self.target_arm_edit.setText(str(value))
         self.main_params.target_arm = value
 
+        self.target_arm_edit.setReadOnly(True)
+        self.target_arm_button.setEnabled(False)
+
     def setup_post_thresh(self, layout):
         self.post_label = QLabel(self.tr("Posterior Threshold"))
         layout.addWidget(self.post_label, 1, 0)
@@ -405,7 +408,7 @@ class Dialog(QDialog):
         valid_num_arms = len(self.config["encoder"]["arm_coords"]) - 1
         try:
             target_arm = float(target_arm)
-            _, rem = divmod(target_arm)
+            _, rem = divmod(target_arm, 1)
             show_error = False
             if rem != 0:
                 show_error = True
@@ -463,7 +466,7 @@ class Dialog(QDialog):
         n_above = self.n_above_edit.text()
         try:
             n_above = float(n_above)
-            _, rem = divmod(n)
+            _, rem = divmod(n, 1)
             show_error = False
             if rem != 0:
                 show_error = True
