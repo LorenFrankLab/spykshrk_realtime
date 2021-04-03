@@ -654,6 +654,8 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
         self.lfp_counter = 0
         self.config = config
 
+        self.time_bin_size = self.config['pp_decoder']['bin_size']
+
         # self.mpi_send.send_record_register_messages(self.get_record_register_messages())
 
     def set_num_trodes(self, message: realtime_base.NumTrodesMessage):
@@ -764,7 +766,7 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                                                        thresh_state=filter_state,
                                                        conditioning_thresh_state=conditioning_filter_state)
                 #also send thresh cross to decoder - only for rank == 2 aka first ripple_node
-                if self.rank == self.config['rank']['ripples'][0]:
+                if self.rank == self.config['rank']['ripples'][0] and self.lfp_counter % (self.time_bin_size/20) == 0:
                     self.mpi_send.send_ripple_thresh_state_decoder(timestamp=datapoint.timestamp,
                                                            elec_grp_id=datapoint.elec_grp_id,
                                                            thresh_state=filter_state,

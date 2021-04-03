@@ -959,25 +959,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         lfp_timekeeper = self.lfp_interface.__next__()
         time = MPI.Wtime()
 
-        # this counts every time an lfp timestamp comes in and is used to trigger computation of
-        # the posterior every x ms
-        if lfp_timekeeper is not None:
-            if lfp_timekeeper.elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]:
-                self.lfp_timekeeper_counter += 1
-                self.decoder_timestamp = lfp_timekeeper.timestamp
-                #print(lfp_timekeeper.timestamp)
-
-        # this is just a check of the lfp_timekeeper and it seems to work as expected, counts up in between spikes
-        # if spike_dec_msg is not None or (self.msg_counter > 0 and lfp_timekeeper is not None and
-        #                                 lfp_timekeeper.timestamp > self.previous_spike_timestamp+
-        #                                 (self.config['pp_decoder']['bin_size']*2*self.lfp_timekeeper_counter)):
-        #    print('5 msec space between decoded spikes. number of empty bins:',self.lfp_timekeeper_counter,
-        #          lfp_timekeeper.timestamp,self.previous_spike_timestamp)
-        #    self.lfp_timekeeper_counter +=1
-
-        # also want to run this if too much time has passed based on lfp_timekeeper
-        # this seems to run now based on the lfp timekeeper, but there are many more dropped spikes
-
         if spike_dec_msg is not None:
 
             # about to overwrite circular buffer from beginning so update stats
@@ -1022,10 +1003,28 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             #if self.msg_counter % 100 == 0:
             #    print('in decoder, spike credible interval',spike_dec_msg.cred_int)
 
-        # new version of decoder that runs every decoding time bin
-        # note we only want this to run every 6 msec, so need something to check the lfp timestamp
-        # we could start this only after 10 spikes have been received
-        if self.lfp_timekeeper_counter % (self.time_bin_size/20) == 0:
+
+        # this counts every time an lfp timestamp comes in and is used to trigger computation of
+        # the posterior every x ms
+        if lfp_timekeeper is not None:
+            self.lfp_timekeeper_counter += 1
+            self.decoder_timestamp = lfp_timekeeper.timestamp
+                #print(lfp_timekeeper.timestamp)
+
+            # this is just a check of the lfp_timekeeper and it seems to work as expected, counts up in between spikes
+            # if spike_dec_msg is not None or (self.msg_counter > 0 and lfp_timekeeper is not None and
+            #                                 lfp_timekeeper.timestamp > self.previous_spike_timestamp+
+            #                                 (self.config['pp_decoder']['bin_size']*2*self.lfp_timekeeper_counter)):
+            #    print('5 msec space between decoded spikes. number of empty bins:',self.lfp_timekeeper_counter,
+            #          lfp_timekeeper.timestamp,self.previous_spike_timestamp)
+            #    self.lfp_timekeeper_counter +=1
+
+            # also want to run this if too much time has passed based on lfp_timekeeper
+            # this seems to run now based on the lfp timekeeper, but there are many more dropped spikes
+
+
+            # we may want to start computing posterior only after 10 spikes have been received
+
             #self.config['trodes_network']['ripple_tetrodes'][0]
             #print('posterior loop',self.lfp_timekeeper_counter,lfp_timekeeper.timestamp,(lfp_timekeeper.timestamp-2*6*30))
 
@@ -1043,7 +1042,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                         self.decoded_spike_array[:, 0] < self.decoder_timestamp - (self.decoder_bin_delay-1)*self.time_bin_size
                     )
                 ).squeeze())
-            if spike_inds.shape[0] > 0:
+            spikes_in_bin_mask = np.logical_and(
+                self.decoded_spike_array[:, 0] >= self.decoder_timestamp - self.decoder_bin_delay*self.time_bin_size,
+                self.decoded_spike_array[:, 0] < self.decoder_timestamp - (self.decoder_bin_delay-1)*self.time_bin_size)
+            if np.sum(spikes_in_bin_mask) > 0:
                 #print(self.lfp_timekeeper_counter)
                 #print(lfp_timekeeper.timestamp/30)
                 #if self.lfp_timekeeper_counter % 100 == 0:
@@ -1052,8 +1054,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # set last column in decoded_spike_array to 1 - might be able to do this directly to posterior_spikes
 
                 # these spikes are being used. mark them with a 1
-                self.decoded_spike_array[spike_inds, -1] = 1
-                posterior_spikes = self.decoded_spike_array[spike_inds]
+                self.decoded_spike_array[spikes_in_bin_mask, -1] = 1
+                posterior_spikes = self.decoded_spike_array[spikes_in_bin_mask]
 
                 # check for multiple timestamps here - if tet list is split in 2 we can just remove any duplicates
 
@@ -1098,7 +1100,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.record_posterior_completed()
 
                 # no spikes remain after removing duplicates
-                elif posterior_spikes.shape[0] == 0:
+                else:
                     #print('no spikes after remove duplicates')
 
                     self.spike_count = 0
@@ -1109,7 +1111,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.posterior, self.likelihood = self.pp_decoder.increment_no_spike_bin()    
 
             # no spikes in time bin of interest
-            elif spike_inds.shape[0] == 0:
+            else:
                 self.spike_count = 0
                 self.enc_cred_int_array = [0,0,0,0,0]
                 self.spike_timestamp = 0

@@ -450,9 +450,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                         #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
 
                         # update spike_sent variable to True each time a spike is actually sent to decoder
-                        self.spike_sent = True
-                        self.thread.fetch_spike_sent(self.spike_sent)
-                        self.thread.get_spike_info(datapoint.timestamp,datapoint.elec_grp_id,self.current_pos,self.config)
+                        # self.spike_sent = True
+                        # self.thread.fetch_spike_sent(self.spike_sent)
+                        # self.thread.get_spike_info(datapoint.timestamp,datapoint.elec_grp_id,self.current_pos,self.config)
                         #print('spike_sent value from manager:',self.spike_sent)
 
                     else:
