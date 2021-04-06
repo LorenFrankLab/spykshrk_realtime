@@ -690,9 +690,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     def update_ripple_threshold_state(self, timestamp, elec_grp_id, threshold_state, conditioning_thresh_state, networkclient):
         # Log timing
-        if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
-            self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
-                               datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
+        # if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
+        #     self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
+        #                        datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
         mpi_time = MPI.Wtime()
 
         # record timestamp from ripple node
@@ -1031,14 +1031,13 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             #         'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
             ##############################################################
 
-            with open('config/taskstate.txt') as taskstate_file:
-                fd = taskstate_file.fileno()
+            with open('config/taskstate.txt', 'rb') as f:
+                fd = f.fileno()
                 fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                # read file
-                for taskstate_file_line in taskstate_file:
-                    pass
-                taskstate = taskstate_file_line
-            self.taskState = np.int(taskstate[0:1])
+                f.seek(-2, os.SEEK_END)
+                while f.read(1) != b'\n':
+                    f.seek(-2, os.SEEK_CUR)
+                self.taskState = int(f.readline().decode()[0:1])
             print('main taskState:',self.taskState)
 
         # to test shortcut message delay
@@ -1626,8 +1625,6 @@ class MainProcess(realtime_base.RealtimeProcess):
 
         self.gui_recv = MainGuiRecvInterface(comm, rank, config, self.stim_decider)
 
-        self.terminate = False
-
         self.mpi_status = MPI.Status()
 
         self.started = False
@@ -1640,7 +1637,7 @@ class MainProcess(realtime_base.RealtimeProcess):
         self.class_log.debug("Past First Barrier")
 
     def trigger_termination(self):
-        self.terminate = True
+        raise StopIteration()
 
     def main_loop(self):
         # self.thread.start()
@@ -1650,28 +1647,34 @@ class MainProcess(realtime_base.RealtimeProcess):
         # Synchronize rank times immediately
         last_time_bin = int(time.time())
 
-        while not self.terminate:
+        try:
 
-                # Synchronize rank times
-                if self.manager.time_sync_on:
-                    current_time_bin = int(time.time())
-                    if current_time_bin >= last_time_bin + 10:
-                        self.manager.synchronize_time()
-                        last_time_bin = current_time_bin
+            while True:
 
-                self.recv_interface.__next__()
-                self.data_recv.__next__()
-                self.vel_pos_recv_interface.__next__()
-                self.posterior_recv_interface.__next__()
-                self.networkclient.__next__()
-                self.gui_recv.__next__()
+                    # Synchronize rank times
+                    if self.manager.time_sync_on:
+                        current_time_bin = int(time.time())
+                        if current_time_bin >= last_time_bin + 10:
+                            self.manager.synchronize_time()
+                            last_time_bin = current_time_bin
 
-                if check_user_input and self.manager.all_ranks_set_up:
-                    print("***************************************", flush=True)
-                    print("   All ranks are set up, ok to start   ", flush=True)
-                    print("***************************************", flush=True)
-                    self.send_interface.send_setup_complete()
-                    self.class_log.debug("Notified GUI that setup was complete")
-                    check_user_input = False
+                    self.recv_interface.__next__()
+                    self.data_recv.__next__()
+                    self.vel_pos_recv_interface.__next__()
+                    self.posterior_recv_interface.__next__()
+                    self.networkclient.__next__()
+                    self.gui_recv.__next__()
+
+                    if check_user_input and self.manager.all_ranks_set_up:
+                        print("***************************************", flush=True)
+                        print("   All ranks are set up, ok to start   ", flush=True)
+                        print("***************************************", flush=True)
+                        self.send_interface.send_setup_complete()
+                        self.class_log.debug("Notified GUI that setup was complete")
+                        check_user_input = False
+
+        except StopIteration as ex:
+            self.class_log.info(
+                'Terminating MainProcess (rank: {:})'.format(self.rank))
 
         self.class_log.info("Main Process Main reached end, exiting.")

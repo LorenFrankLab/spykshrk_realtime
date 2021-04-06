@@ -289,9 +289,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
         # to turn on, uncomment the line, self.thread.start()
-        self.stopFlag = Event()
-        self.thread = NoSpikeTimerThread(self.stopFlag, self.spike_sent, self.mpi_send,
-                                        self.spike_timestamp, self.spike_elec_grp_id, self.current_pos, self.config)
+        # self.stopFlag = Event()
+        # self.thread = NoSpikeTimerThread(self.stopFlag, self.spike_sent, self.mpi_send,
+        #                                 self.spike_timestamp, self.spike_elec_grp_id, self.current_pos, self.config)
         #self.thread.start()
 
 
@@ -319,9 +319,6 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_interface.start_all_streams()
         self.pos_interface.start_all_streams()
 
-    def trigger_termination(self):
-        self.spike_interface.stop_iterator()
-
     def process_next_data(self):
 
         time = MPI.Wtime()
@@ -335,8 +332,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
             datapoint = msgs[0]
             timing_msg = msgs[1]
             if isinstance(datapoint, SpikePoint):
-                self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='enc_recv')
+                # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                    datatype=datatypes.Datatypes.SPIKES, label='enc_recv')
                 #print("new spike: ",datapoint.timestamp,datapoint.data)
 
                 self.spk_counter += 1
@@ -344,13 +341,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 # first find dead channels from spykshrk config file and replace data with 0s (range: 0-3)
                 if str(datapoint.elec_grp_id) in self.config['encoder']['dead_channels']:
                     #print('dead channel',datapoint.elec_grp_id)
-                    dead_channel = self.config['encoder']['dead_channels'].get(str(datapoint.elec_grp_id))
+                    dead_channel = self.config['encoder']['dead_channels'][str(datapoint.elec_grp_id)]
                     if self.spk_counter == 1:
                         print('tetrode:',datapoint.elec_grp_id,'dead channel:',dead_channel)                    
                     #print('channel is',dead_channel)
                     #print('data is',datapoint.data[dead_channel])
                     # zero out dead channel
-                    datapoint.data[dead_channel] = datapoint.data[dead_channel]*0
+                    datapoint.data[dead_channel] = 0
                     #print('zeroed data is',datapoint.data[dead_channel])
                 #for key, value in self.config['encoder']['dead_channels'].items():
                 #    print('dead channel list',key,value)
@@ -367,34 +364,20 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #print('mark',amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3])
 
                 # new method - take 4 values from single bin with highest peak
-                max_0 = max(datapoint.data[0])
-                #print('zeroed max',max_0,datapoint.elec_grp_id)
-                max_1 = max(datapoint.data[1])
-                max_2 = max(datapoint.data[2])
-                max_3 = max(datapoint.data[3])
-                max_channel = np.argmax([max_0,max_1,max_2,max_3])
-
-                max_0_ind = np.argmax(datapoint.data[0])
-                max_1_ind = np.argmax(datapoint.data[1])
-                max_2_ind = np.argmax(datapoint.data[2])
-                max_3_ind = np.argmax(datapoint.data[3])
-
-                if max_channel == 0:
-                    amp_marks = [datapoint.data[0][max_0_ind],datapoint.data[1][max_0_ind],datapoint.data[2][max_0_ind],datapoint.data[3][max_0_ind]]
-                elif max_channel == 1:
-                    amp_marks = [datapoint.data[0][max_1_ind],datapoint.data[1][max_1_ind],datapoint.data[2][max_1_ind],datapoint.data[3][max_1_ind]]
-                elif max_channel == 2:
-                    amp_marks = [datapoint.data[0][max_2_ind],datapoint.data[1][max_2_ind],datapoint.data[2][max_2_ind],datapoint.data[3][max_2_ind]]
-                elif max_channel == 3:
-                    amp_marks = [datapoint.data[0][max_3_ind],datapoint.data[1][max_3_ind],datapoint.data[2][max_3_ind],datapoint.data[3][max_3_ind]]
+                spike_data = datapoint.data
+                channel_peaks = np.max(spike_data, axis=1)
+                peak_channel_ind = np.argmax(channel_peaks)
+                t_ind = np.argmax(spike_data[peak_channel_ind])
+                amp_marks = spike_data[:, t_ind]
                 #print('new mark',amp_marks)
 
                 # test multiple dead channls - great it works!
                 #if datapoint.elec_grp_id == 7:
                 #    print('tet 7 marks:',amp_marks)
 
-                self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='kde_start')
+                # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                    datatype=datatypes.Datatypes.SPIKES, label='kde_start')
+
                 # this looks up the current spike in the RStar Tree
                 # also filter out large noise events (start with 1500uV)
                 # turn off this filter because we remove duplicates in decoder process now
@@ -409,14 +392,14 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #    np.all(np.asarray(amp_marks)>-self.config['encoder']['noise_max_amp'])):
                 if max(amp_marks) > self.config['encoder']['spk_amp']:
                     #print(datapoint.timestamp,datapoint.elec_grp_id, amp_marks)
-                    query_result = self.encoders[datapoint.elec_grp_id]. \
-                        query_mark_hist(amp_marks,datapoint.timestamp,
-                                        datapoint.elec_grp_id)                # type: kernel_encoder.RSTKernelEncoderQuery
+                    query_result = self.encoders[datapoint.elec_grp_id].query_mark_hist(
+                        amp_marks,datapoint.timestamp,
+                        datapoint.elec_grp_id)          # type: kernel_encoder.RSTKernelEncoderQuery
                     #print('decoded spike',query_result.query_hist)
                     if query_result is not None:
 
-                        self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                    datatype=datatypes.Datatypes.SPIKES, label='kde_end')
+                        # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                        #             datatype=datatypes.Datatypes.SPIKES, label='kde_end')
 
                         # for weight, position in zip(query_result.query_weights, query_result.query_positions):
                         #     self.write_record(realtime_base.RecordIDs.ENCODER_QUERY,
@@ -468,9 +451,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                         #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
 
                         # update spike_sent variable to True each time a spike is actually sent to decoder
-                        self.spike_sent = True
-                        self.thread.fetch_spike_sent(self.spike_sent)
-                        self.thread.get_spike_info(datapoint.timestamp,datapoint.elec_grp_id,self.current_pos,self.config)
+                        # self.spike_sent = True
+                        # self.thread.fetch_spike_sent(self.spike_sent)
+                        # self.thread.get_spike_info(datapoint.timestamp,datapoint.elec_grp_id,self.current_pos,self.config)
                         #print('spike_sent value from manager:',self.spike_sent)
 
                     else:
@@ -491,14 +474,12 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 
-                        self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=
-                                           datapoint.elec_grp_id,
-                                           datatype=datatypes.Datatypes.SPIKES, label='spk_enc')
-                        pass
+                        # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=
+                        #                    datapoint.elec_grp_id,
+                        #                    datatype=datatypes.Datatypes.SPIKES, label='spk_enc')
 
                 if self.spk_counter % 1000 == 0:
                     self.class_log.debug('Received {} spikes.'.format(self.spk_counter))
-                pass
 
         msgs = self.pos_interface.__next__()
         if msgs is None:
@@ -531,15 +512,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_counter % 15 == 0:
                   #if self.vel_pos_counter % 1000 == 0:
                       #print('thresh_counter: ',self.thresh_counter)
-                      with open('config/taskstate.txt') as taskState_file:
-                          fd = taskState_file.fileno()
-                          fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                          # read file
-                          for taskState_file_line in taskState_file:
-                              pass
-                          new_taskState = taskState_file_line
-                      # final 1 character in line is task state
-                      self.taskState = np.int(new_taskState[0:1])
+                    with open('config/taskstate.txt', 'rb') as f:
+                        fd = f.fileno()
+                        fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                        f.seek(-2, os.SEEK_END)
+                        while f.read(1) != b'\n':
+                            f.seek(-2, os.SEEK_CUR)
+                        self.taskState = int(f.readline().decode()[0:1])
                       #if self.rank == 10:
                       #    print('encoder taskstate =',self.taskState)
 
@@ -562,7 +541,6 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 if self.pos_counter % 1000 == 0:
                     self.class_log.info('Received {} pos datapoints.'.format(self.pos_counter))
-                pass
     
     def process_gui_request_message(self, message):
         if isinstance(message, GuiEncoderParameterMessage):
@@ -621,16 +599,11 @@ class EncoderProcess(realtime_base.RealtimeProcess):
 
         self.mpi_recv = EncoderMPIRecvInterface(comm=comm, rank=rank, config=config, encoder_manager=self.enc_man)
 
-        self.terminate = False
-
         # config['trodes_network']['networkobject'].registerTerminateCallback(self.trigger_termination)
 
         # First Barrier to finish setting up nodes
         self.class_log.debug("First Barrier")
         self.comm.Barrier()
-
-    def trigger_termination(self):
-        self.terminate = True
 
     def main_loop(self):
 
@@ -640,12 +613,12 @@ class EncoderProcess(realtime_base.RealtimeProcess):
         self.enc_man.register_pos_datatype()
 
         try:
-            while not self.terminate:
+            while True:
                 self.mpi_recv.__next__()
                 self.enc_man.process_next_data()
 
         except StopIteration as ex:
             self.class_log.info('Terminating EncodingProcess (rank: {:})'.format(self.rank))
 
-        self.enc_man.stopFlag.set()
+        # self.enc_man.stopFlag.set()
         self.class_log.info("Encoding Process reached end, exiting.")

@@ -654,6 +654,8 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
         self.lfp_counter = 0
         self.config = config
 
+        self.time_bin_size = self.config['pp_decoder']['bin_size']
+
         # self.mpi_send.send_record_register_messages(self.get_record_register_messages())
 
     def set_num_trodes(self, message: realtime_base.NumTrodesMessage):
@@ -745,9 +747,9 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
             if isinstance(datapoint, LFPPoint):
                 #print("new lfp point: ",datapoint.timestamp,datapoint.data)
                 self.lfp_counter +=1
-                if self.lfp_counter % 100 == 0:
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                       datatype=datatypes.Datatypes.LFP, label='rip_recv')
+                # if self.lfp_counter % 100 == 0:
+                #     self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                        datatype=datatypes.Datatypes.LFP, label='rip_recv')
 
                 filter_state, conditioning_filter_state = (self.ripple_filters[datapoint.elec_grp_id].
                                                            process_data(timestamp=datapoint.timestamp,
@@ -755,16 +757,16 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
 
                 #print('at ripple: ',datapoint.timestamp,datapoint.data)
 
-                if self.lfp_counter % 100 == 0:
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                        datatype=datatypes.Datatypes.LFP, label='rip_send')
+                # if self.lfp_counter % 100 == 0:
+                #     self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                         datatype=datatypes.Datatypes.LFP, label='rip_send')
                 # this sends to stim_decider class in main_process.py that then applies the # of tetrode filter
                 self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,
                                                        elec_grp_id=datapoint.elec_grp_id,
                                                        thresh_state=filter_state,
                                                        conditioning_thresh_state=conditioning_filter_state)
                 #also send thresh cross to decoder - only for rank == 2 aka first ripple_node
-                if self.rank == self.config['rank']['ripples'][0]:
+                if self.rank == self.config['rank']['ripples'][0] and self.lfp_counter % (self.time_bin_size/20) == 0:
                     self.mpi_send.send_ripple_thresh_state_decoder(timestamp=datapoint.timestamp,
                                                            elec_grp_id=datapoint.elec_grp_id,
                                                            thresh_state=filter_state,
@@ -822,22 +824,18 @@ class RippleProcess(realtime_base.RealtimeProcess):
 
         self.gui_recv = RippleGuiRecvInterface(self.comm, self.rank, self.config, self.rip_man)
 
-        self.terminate = False
         # config['trodes_network']['networkobject'].registerTerminateCallback(self.trigger_termination)
 
         # First Barrier to finish setting up nodes
         self.class_log.debug("First Barrier")
         self.comm.Barrier()
 
-    def trigger_termination(self):
-        self.terminate = True
-
     def main_loop(self):
 
         self.rip_man.setup_mpi()
 
         try:
-            while not self.terminate:
+            while True:
                 self.mpi_recv.__next__()
                 self.rip_man.process_next_data()
                 self.gui_recv.__next__()
