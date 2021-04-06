@@ -975,13 +975,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
             self.decoded_spike_counter += 1
 
-            if self.lfp_timekeeper_counter % 1000 == 0:
-                print(self.rank,'total spikes:',self.decoded_spike_counter,
-                    'dropped spikes:',self.dropped_spikes, 'duplicated spikes:',self.duplicate_spikes)
-                #print('ripple tet',self.config['trodes_network']['ripple_tetrodes'][0])
-                #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
-                #print(self.decoded_spike_array[:,-1])
-
             self.msg_counter += 1
             if self.msg_counter % 1000 == 0:
                 self.class_log.debug(
@@ -1000,7 +993,14 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         if lfp_timekeeper is not None:
             self.lfp_timekeeper_counter += 1
             self.decoder_timestamp = lfp_timekeeper.timestamp
-                #print(lfp_timekeeper.timestamp)
+            #print(lfp_timekeeper.timestamp)
+
+            if self.lfp_timekeeper_counter % 1000 == 0:
+                print(self.rank,'total spikes:',self.decoded_spike_counter,
+                    'dropped spikes:',self.dropped_spikes, 'duplicated spikes:',self.duplicate_spikes)
+                #print('ripple tet',self.config['trodes_network']['ripple_tetrodes'][0])
+                #print(self.spike_buffer_size, self.decoded_spike_array[:,-1].sum())
+                #print(self.decoded_spike_array[:,-1])
 
             # this is just a check of the lfp_timekeeper and it seems to work as expected, counts up in between spikes
             # if spike_dec_msg is not None or (self.msg_counter > 0 and lfp_timekeeper is not None and
