@@ -747,9 +747,9 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
             if isinstance(datapoint, LFPPoint):
                 #print("new lfp point: ",datapoint.timestamp,datapoint.data)
                 self.lfp_counter +=1
-                if self.lfp_counter % 100 == 0:
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                       datatype=datatypes.Datatypes.LFP, label='rip_recv')
+                # if self.lfp_counter % 100 == 0:
+                #     self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                        datatype=datatypes.Datatypes.LFP, label='rip_recv')
 
                 filter_state, conditioning_filter_state = (self.ripple_filters[datapoint.elec_grp_id].
                                                            process_data(timestamp=datapoint.timestamp,
@@ -757,9 +757,9 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
 
                 #print('at ripple: ',datapoint.timestamp,datapoint.data)
 
-                if self.lfp_counter % 100 == 0:
-                    self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                        datatype=datatypes.Datatypes.LFP, label='rip_send')
+                # if self.lfp_counter % 100 == 0:
+                #     self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                         datatype=datatypes.Datatypes.LFP, label='rip_send')
                 # this sends to stim_decider class in main_process.py that then applies the # of tetrode filter
                 self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,
                                                        elec_grp_id=datapoint.elec_grp_id,

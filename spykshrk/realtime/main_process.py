@@ -690,9 +690,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     def update_ripple_threshold_state(self, timestamp, elec_grp_id, threshold_state, conditioning_thresh_state, networkclient):
         # Log timing
-        if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
-            self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
-                               datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
+        # if self.thresh_counter % 1000 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
+        #     self.record_timing(timestamp=timestamp, elec_grp_id=elec_grp_id,
+        #                        datatype=datatypes.Datatypes.LFP, label='stim_rip_state')
         mpi_time = MPI.Wtime()
 
         # record timestamp from ripple node

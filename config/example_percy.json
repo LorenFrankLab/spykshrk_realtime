@@ -186,7 +186,7 @@
         "trans_mat_uniform_gain": 1,
         "trans_mat_smoother_std": 3,
         "circle_buffer": 1000,
-        "bin_delay": 1
+        "bin_delay": 3
     },
 
     "trodes_network": {

@@ -924,15 +924,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         print('rank',self.rank,'manager ntrode list',self.ntrode_list)
         self.pp_decoder.select_ntrodes(self.ntrode_list)
 
-    def record_posterior_completed(self):
-        # # record timing
-        # # should timestamp be something else?
-        # if self.lfp_timekeeper_counter % 10 == 0:
-        #     # bin timestamp: timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size
-        #     self.record_timing(self.spike_timestamp, elec_grp_id=1,
-        #                     datatype=datatypes.Datatypes.SPIKES, label='post_end')
-        pass
-
     def update_posterior_stats(self):
 
         # calculate arm sum, max, and cred interval
@@ -997,9 +988,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     'Received {} decoded messages.'.format(self.msg_counter))
             #print('spike timestamp',spike_dec_msg.timestamp)
 
-            if self.msg_counter % 100 == 0:
-                self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='dec_recv')   
+            # if self.msg_counter % 100 == 0:
+            #     self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+            #                        datatype=datatypes.Datatypes.SPIKES, label='dec_recv')
             #if self.msg_counter % 100 == 0:
             #    print('in decoder, spike credible interval',spike_dec_msg.cred_int)
 
@@ -1034,14 +1025,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             #    self.record_timing(timestamp=self.spike_timestamp, elec_grp_id=1,
             #                       datatype=datatypes.Datatypes.SPIKES, label='post_start')
 
-            # spikes in time bin of interest
-            spike_inds = np.atleast_1d(
-                np.argwhere(
-                    np.logical_and(
-                        self.decoded_spike_array[:, 0] >= self.decoder_timestamp - self.decoder_bin_delay*self.time_bin_size,
-                        self.decoded_spike_array[:, 0] < self.decoder_timestamp - (self.decoder_bin_delay-1)*self.time_bin_size
-                    )
-                ).squeeze())
             spikes_in_bin_mask = np.logical_and(
                 self.decoded_spike_array[:, 0] >= self.decoder_timestamp - self.decoder_bin_delay*self.time_bin_size,
                 self.decoded_spike_array[:, 0] < self.decoder_timestamp - (self.decoder_bin_delay-1)*self.time_bin_size)
@@ -1097,7 +1080,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     # run increment bin: to calculate like and posterior
                     self.posterior, self.likelihood = self.pp_decoder.increment_bin()
 
-                    self.record_posterior_completed()
+                    # # record timing
+                    # # should timestamp be something else?
+                    # if self.lfp_timekeeper_counter % 10 == 0:
+                    #     # bin timestamp: timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size
+                    #     self.record_timing(self.spike_timestamp, elec_grp_id=1,
+                    #                     datatype=datatypes.Datatypes.SPIKES, label='post_end')
 
                 # no spikes remain after removing duplicates
                 else:
