@@ -80,6 +80,10 @@ def main(argv):
         # MPI is not running or is running on a single node.  Single processor mode
         pass
 
+    # make sure config is fully updated for all ranks (we modified it by
+    # prepending the time/date to the prefix)
+    comm.Barrier()
+
     # Make sure output directory exists
     os.makedirs(os.path.join(config['files']['output_dir']), exist_ok=True)
     
