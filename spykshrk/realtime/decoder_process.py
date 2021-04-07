@@ -883,6 +883,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_buffer_size = self.config['pp_decoder']['circle_buffer']
         self.decoded_spike_array = np.zeros((self.spike_buffer_size, self.config['encoder']['position']['bins']+4))
         self.decoder_bin_delay = self.config['pp_decoder']['bin_delay']
+        print('bin delay',self.decoder_bin_delay)
 
         # credible interval and posterior max
         self.spxx = []
@@ -1030,6 +1031,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             #if self.lfp_timekeeper_counter % 10 == 0:
             #    self.record_timing(timestamp=self.spike_timestamp, elec_grp_id=1,
             #                       datatype=datatypes.Datatypes.SPIKES, label='post_start')
+            
+            if self.lfp_timekeeper_counter % 1000 == 0:
+                print('bin delay',self.decoder_bin_delay)
 
             spikes_in_bin_mask = np.logical_and(
                 self.decoded_spike_array[:, 0] >= self.decoder_timestamp - self.decoder_bin_delay*self.time_bin_size,
