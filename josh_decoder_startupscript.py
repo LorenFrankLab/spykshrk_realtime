@@ -11,6 +11,7 @@ from mpi4py import MPI
 from spykshrk.realtime import (main_process, ripple_process, encoder_process,
                                decoder_process, gui_process)
 from spykshrk.realtime.simulator import simulator_process
+from spykshrk.realtime.postprocessing import rec_merge_hdf5
 
 def main(argv):
     
@@ -108,6 +109,11 @@ def main(argv):
         logging.info(f"Rank {rank} finished main loop, exiting main")
     else:
         logging.info(f"Rank {rank} could not start up in main correctly")
+
+    if rank == 0:
+        logging.info("Beginning merge script")
+        rec_merge_hdf5.main(argv, config=config)
+        logging.info("Finished merge script")
 
 if __name__ == "__main__":
     main(sys.argv[1:])

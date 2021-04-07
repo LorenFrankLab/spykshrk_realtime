@@ -69,21 +69,22 @@ def merge_pandas(filename_items):
     hdf5_lock.release()
 
 
-def main(argv):
+def main(argv, *, config=None):
 
     logging.getLogger().setLevel('DEBUG')
 
-    try:
-        opts, args = getopt.getopt(argv, "", ["config="])
-    except getopt.GetoptError:
-        logging.error('Usage: ...')
-        sys.exit(2)
+    if config is None:
+        try:
+            opts, args = getopt.getopt(argv, "", ["config="])
+        except getopt.GetoptError:
+            logging.error('Usage: ...')
+            sys.exit(2)
 
-    for opt, arg in opts:
-        if opt == '--config':
-            config_filename = arg
+        for opt, arg in opts:
+            if opt == '--config':
+                config_filename = arg
 
-    config = json.load(open(config_filename, 'r'))
+        config = json.load(open(config_filename, 'r'))
 
     hdf5_filename_l = os.path.join(config['files']['output_dir'],
                                    '{}.rec_merged.h5'.format(config['files']['prefix']))
