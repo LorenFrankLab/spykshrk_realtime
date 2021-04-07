@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import numpy as np
 
 def get_ntrode_inds(config, ntrode_ids):
     # ntrode_ids should be a list of integers

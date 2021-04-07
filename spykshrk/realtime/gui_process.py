@@ -755,7 +755,7 @@ class DecodingResultsWindow(QMainWindow):
         if self.config['clusterless_estimator'] == 'pp_decoder':
             n_states = 1
         elif self.config['clusterless_estimator'] == 'pp_classifier':
-            n_states = len(self.config['pp_classifier']['labels'])
+            n_states = len(self.config['pp_classifier']['state_labels'])
         self.posterior_buff = np.zeros((n_states, B))
         for ii, rank in enumerate(self.config["rank"]["decoder"]):
             self.decoder_rank_ind_mapping[rank] = ii

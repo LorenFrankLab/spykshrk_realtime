@@ -46,6 +46,8 @@ class LinearPositionAssignment(object):
         else:
             bin_ind = np.searchsorted(bin_edges, segment_pos, side='right') - 1
 
+        if bin_ind > len(bins) - 1:
+            bin_ind = len(bins) - 1
         return bins[bin_ind]
 
 

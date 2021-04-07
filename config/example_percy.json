@@ -152,9 +152,9 @@
 
         "position": {
             "lower": 0,
-            "upper": 41,
-            "bins": 41,
-            "arm_pos": [[0, 40]]
+            "upper": 82,
+            "bins": 82,
+            "arm_pos": [[0, 81]]
         },
         "position_kernel": {
             "std": 5
@@ -170,6 +170,7 @@
         },
         "occupancy": [[0]],
         "arm_coords": [[0, 17], [27, 49], [59, 81]],
+	"arm_ids": [0, 0, 1, 2],
         "cmperpx": 0.222
 
     },
@@ -180,7 +181,7 @@
         "bin_size": 30000
     },
 
-    "clusterless_estimator": "pp_decoder",
+    "clusterless_estimator": "pp_classifier",
     "pp_decoder": {
         "number_arms": 2,
         "bin_size": 180,
@@ -193,11 +194,11 @@
 
     "pp_classifier": {
         "state_labels": ["stationary", "continuous", "fragmented"],
-        "discrete_state": {
-            "type": "strong_diagonal",
+        "discrete_transition": {
+            "type": ["strong_diagonal"],
             "diagonal": 0.98
         },
-        "continuous_state": {
+        "continuous_transition": {
             "type": [["identity", "random_walk", "uniform"],
                      ["identity", "random_walk", "uniform"],
                      ["uniform", "uniform", "uniform"]],

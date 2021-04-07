@@ -1147,7 +1147,7 @@ class ClusterlessDecoder(ClusterlessEstimator):
         self.firing_rate = {}
 
         # create sungod transition matrix
-        self.transition_mat = ClusterlessHandler._sungod_transition_matrix(self,self.uniform_gain,self.arm_coords,
+        self.transition_mat = ClusterlessEstimator._sungod_transition_matrix(self,self.uniform_gain,self.arm_coords,
                                                                             self.max_pos,self.pos_bins_1,
                                                                             self.number_arms)
 
@@ -1284,9 +1284,8 @@ class ClusterlessClassifier(ClusterlessEstimator):
     def __init__(self, rank, config):
         super().__init__(rank, config)
         # Initialize major PP variables
-        n_states = len(self.config['pp_classifier']['labels'])
+        n_states = len(self.config['pp_classifier']['state_labels'])
         n_bins = int(self.arm_coords.max() - self.arm_coords.min() + 1)
-        self.labels = self.config['pp_classifier']['labels']
         self.observation = np.ones(self.pos_bins)
         self.observation_next = np.ones(self.pos_bins)
         self.occ = np.ones(self.pos_bins)
@@ -1298,7 +1297,7 @@ class ClusterlessClassifier(ClusterlessEstimator):
 
         dtt = self.config['pp_classifier']['discrete_transition']['type'][0]
         diag = self.config['pp_classifier']['discrete_transition']['diagonal']
-        self.discrete_state_transition = DISCRETE_TRANSITION[dtt](n_states, diag)
+        self.discrete_state_transition = DISCRETE_TRANSITIONS[dtt](n_states, diag)
 
         ctt = self.config['pp_classifier']['continuous_transition']['type']
         cm_per_bin = self.config['pp_classifier']['continuous_transition']['cm_per_bin']
@@ -1308,8 +1307,8 @@ class ClusterlessClassifier(ClusterlessEstimator):
         for row_ind, row in enumerate(ctt):
             for col_ind, transition_type in enumerate(row):
                 self.continuous_state_transition[row_ind, col_ind] = (
-                    CONTINUOUS_TRANSITION[transition_type](
-                        transition_type, cm_per_bin, sigma
+                    CONTINUOUS_TRANSITIONS[transition_type](
+                        self.arm_coords, cm_per_bin, sigma
                     )
                 )
 
@@ -1446,7 +1445,7 @@ class ClusterlessClassifier(ClusterlessEstimator):
                     self.prev_posterior[state_k_1] @
                     self.continuous_state_transition[state_k_1, state_k]
                 )
-        self.posterior[state_k] = utils.normalize_to_probability(
+        self.posterior = utils.normalize_to_probability(
             prior * self.likelihood)
 
         # print('likelihood',self.likelihood,np.sum(self.likelihood))
@@ -1495,8 +1494,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                            'linear_pos', 'velocity','dec_rank'] + ['x{:0{dig}d}'.
                                                                         format(x, dig=len(str(config['encoder']['position']['bins'])))
                                                                                 for x in range(config['encoder']['position']['bins'])]],
-                                              rec_formats=['qdddddddqqqqqddddddddddqqq' + 'd' * config['encoder']['position']['bins'],
-                                                           'qddqq' + 'd' * config['encoder']['position']['bins'] + 'd' * len(state_labels),
+                                              rec_formats=['qdddddddqqqqqddddddddddqqq' 
+                                                            + 'd' * config['encoder']['position']['bins'] + 'd' * len(state_labels),
+                                                           'qddqq' + 'd' * config['encoder']['position']['bins'],
                                                            'qiii',
                                                            'qqqqqqqdddq' + 'd' * config['encoder']['position']['bins']])
         # i think if you change second q to d above, then you can replace real_pos_time
@@ -1610,7 +1610,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.posterior_arm_sum = self.clusterless_estimator.calculate_posterior_arm_sum(posterior_1d)
 
         # add credible interval here and add to message
-        self.spxx = np.sort(self.posterior_1d)[::-1]
+        self.spxx = np.sort(posterior_1d)[::-1]
         self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
         #if spike_dec_msg is not None and self.msg_counter % 10000 == 0:
         #    print('credible interval',self.crit_ind)
