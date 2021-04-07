@@ -752,7 +752,11 @@ class DecodingResultsWindow(QMainWindow):
         self.decoder_rank_ind_mapping = {}
         B = self.config["encoder"]["position"]["bins"]
         N = self.num_time_bins
-        self.posterior_buff = np.zeros(B)
+        if self.config['clusterless_estimator'] == 'pp_decoder':
+            n_states = 1
+        elif self.config['clusterless_estimator'] == 'pp_classifier':
+            n_states = len(self.config['pp_classifier']['labels'])
+        self.posterior_buff = np.zeros((n_states, B))
         for ii, rank in enumerate(self.config["rank"]["decoder"]):
             self.decoder_rank_ind_mapping[rank] = ii
             self.posterior_datas[ii] = np.zeros((B, N))
@@ -879,7 +883,10 @@ class DecodingResultsWindow(QMainWindow):
     def process_new_data(self):
         sender = self.mpi_status.source
         ind = self.decoder_rank_ind_mapping[sender]
-        self.posterior_datas[ind][:, self.posterior_datas_ind[ind]] = self.posterior_buff.copy()
+        np.sum(
+            self.posterior_buff,
+            axis=0,
+            out=self.posterior_datas[ind][:, self.posterior_datas_ind[ind]])
         self.posterior_datas_ind[ind] = (self.posterior_datas_ind[ind] + 1) % self.num_time_bins
 
     def update_data(self):
