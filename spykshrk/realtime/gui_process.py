@@ -749,22 +749,31 @@ class DecodingResultsWindow(QMainWindow):
         self.posterior_datas = [None] * num_plots
         self.posterior_datas_ind = [0] * num_plots
 
+        self.state_plots = [None] * num_plots
+        self.state_plot_datas = [ [] for _ in range(num_plots)]
+        self.state_datas = [None] * num_plots
+        self.state_datas_ind = [0] * num_plots
+
         self.decoder_rank_ind_mapping = {}
         B = self.config["encoder"]["position"]["bins"]
         N = self.num_time_bins
         if self.config['clusterless_estimator'] == 'pp_decoder':
-            n_states = 1
+            self.n_states = 1
         elif self.config['clusterless_estimator'] == 'pp_classifier':
-            n_states = len(self.config['pp_classifier']['state_labels'])
-        self.posterior_buff = np.zeros((n_states, B))
+            self.n_states = len(self.config['pp_classifier']['state_labels'])
+        self.posterior_buff = np.zeros((self.n_states, B))
         for ii, rank in enumerate(self.config["rank"]["decoder"]):
             self.decoder_rank_ind_mapping[rank] = ii
             self.posterior_datas[ii] = np.zeros((B, N))
+            self.state_datas[ii] = np.zeros((self.n_states, N))
 
+        colors = ['#4c72b0','#dd8452', '#55a868'] 
+        labels = self.config['pp_classifier']['state_labels']
         # plot decoder lines
         for ii in range(num_plots):
+            # top row - marginalized posterior
             self.plots[ii] = self.graphics_widget.addPlot(
-                ii, 0, 1, 1,
+                0, ii, 1, 1,
                 labels={'left':'Position bin', 'bottom':'Time (sec)'})
             coords = self.config["encoder"]["arm_coords"]
             for lb, ub in coords:
@@ -780,6 +789,26 @@ class DecodingResultsWindow(QMainWindow):
                     )
                 )
                 self.plots[ii].addItem(self.plot_datas[ii][-1])
+
+            self.plots[ii].setMenuEnabled(False)
+            self.images[ii] = pg.ImageItem(border=None)
+            self.images[ii].setZValue(-100)
+            self.plots[ii].addItem(self.images[ii])
+
+            # bottom row - state
+            self.state_plots[ii] = self.graphics_widget.addPlot(
+                1, ii, 1, 1,
+                labels={'left':'Position bin', 'bottom':'Time (sec)'})
+            self.state_plots[ii].addLegend(offset=None)
+            self.state_plots[ii].setRange(yRange=[0, 2])
+            self.state_plots[ii].setMenuEnabled(False)
+            for color, label in zip(colors, labels):
+                self.state_plot_datas[ii].append(
+                    pg.PlotDataItem(
+                        np.zeros(self.num_time_bins), pen=color, width=10, name=label
+                    )
+                )
+                self.state_plots[ii].addItem(self.state_plot_datas[ii][-1])
             
             # scale axes to time coordinates - make this user settable
             # rework this later to be more flexible
@@ -787,11 +816,11 @@ class DecodingResultsWindow(QMainWindow):
             ticks = np.linspace(0, N, 5)
             tick_labels = [str(np.round(tick*0.006, decimals=2)) for tick in ticks]
             x_axis.setTicks([[ (tick, tick_label) for (tick, tick_label) in zip(ticks, tick_labels)]])
-            
-            self.plots[ii].setMenuEnabled(False)
-            self.images[ii] = pg.ImageItem(border=None)
-            self.images[ii].setZValue(-100)
-            self.plots[ii].addItem(self.images[ii])     
+
+            x_axis = self.state_plots[ii].getAxis("bottom")
+            ticks = np.linspace(0, N, 5)
+            tick_labels = [str(np.round(tick*0.006, decimals=2)) for tick in ticks]
+            x_axis.setTicks([[ (tick, tick_label) for (tick, tick_label) in zip(ticks, tick_labels)]])
         
         self.init_colormap()
 
@@ -883,16 +912,23 @@ class DecodingResultsWindow(QMainWindow):
     def process_new_data(self):
         sender = self.mpi_status.source
         ind = self.decoder_rank_ind_mapping[sender]
-        np.sum(
+        np.nansum(
             self.posterior_buff,
             axis=0,
             out=self.posterior_datas[ind][:, self.posterior_datas_ind[ind]])
         self.posterior_datas_ind[ind] = (self.posterior_datas_ind[ind] + 1) % self.num_time_bins
 
+        self.state_datas[ind][:, self.state_datas_ind[ind]] = np.nansum(self.posterior_buff, axis=1)
+        self.state_datas_ind[ind] = (self.state_datas_ind[ind] + 1) % self.num_time_bins
+
     def update_data(self):
         for ii in range(len(self.plots)):
             self.posterior_datas[ii][np.isnan(self.posterior_datas[ii])] = 0
             self.images[ii].setImage(self.posterior_datas[ii].T * 255)
+            self.state_datas[ii][np.isnan(self.state_datas[ii])] = 0
+            
+            for state_ind in range(self.n_states):
+                self.state_plot_datas[ii][state_ind].setData(self.state_datas[ii][state_ind])
     
     def run(self):
         self.elapsed_timer.start()
