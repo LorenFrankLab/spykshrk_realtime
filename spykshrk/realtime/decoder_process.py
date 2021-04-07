@@ -992,9 +992,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
             self.decoded_spike_counter += 1
 
-            if self.msg_counter % 100 == 0:
-                self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='dec_recv')   
+            #if self.msg_counter % 100 == 0:
+            #    self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+            #                       datatype=datatypes.Datatypes.SPIKES, label='dec_recv')   
+            
             #if self.msg_counter % 100 == 0:
             #    print('in decoder, spike credible interval',spike_dec_msg.cred_int) 
 
@@ -1069,10 +1070,10 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     posterior, likelihood = self.pp_decoder.increment_bin()
                     
                     # record timing
-                    if self.lfp_timekeeper_counter % 10 == 0:
-                        # bin timestamp: timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size
-                        self.record_timing(self.spike_timestamp, elec_grp_id=1,
-                                       datatype=datatypes.Datatypes.SPIKES, label='post_end')                
+                    #if self.lfp_timekeeper_counter % 10 == 0:
+                    #    # bin timestamp: timestamp=lfp_timekeeper.timestamp-self.decoder_bin_delay*self.time_bin_size
+                    #    self.record_timing(self.spike_timestamp, elec_grp_id=1,
+                    #                   datatype=datatypes.Datatypes.SPIKES, label='post_end')                
 
                     # calculate arm sum, max, and cred interval
                     self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(
@@ -1386,9 +1387,9 @@ class BayesianDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
         if spike_dec_msg is not None:
 
-            if self.msg_counter % 100 == 0:
-                self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='dec_recv')
+            #if self.msg_counter % 100 == 0:
+            #    self.record_timing(timestamp=spike_dec_msg.timestamp, elec_grp_id=spike_dec_msg.elec_grp_id,
+            #                       datatype=datatypes.Datatypes.SPIKES, label='dec_recv')
 
             if self.current_time_bin == 0:
                 self.current_time_bin = math.floor(

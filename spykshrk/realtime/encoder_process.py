@@ -335,8 +335,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
             datapoint = msgs[0]
             timing_msg = msgs[1]
             if isinstance(datapoint, SpikePoint):
-                self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='enc_recv')
+                #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                   datatype=datatypes.Datatypes.SPIKES, label='enc_recv')
                 #print("new spike: ",datapoint.timestamp,datapoint.data)
 
                 self.spk_counter += 1
@@ -393,8 +393,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #if datapoint.elec_grp_id == 7:
                 #    print('tet 7 marks:',amp_marks)
 
-                self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                   datatype=datatypes.Datatypes.SPIKES, label='kde_start')
+                #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                   datatype=datatypes.Datatypes.SPIKES, label='kde_start')
+                
                 # this looks up the current spike in the RStar Tree
                 # also filter out large noise events (start with 1500uV)
                 # turn off this filter because we remove duplicates in decoder process now
@@ -415,8 +416,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     #print('decoded spike',query_result.query_hist)
                     if query_result is not None:
 
-                        self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                                    datatype=datatypes.Datatypes.SPIKES, label='kde_end')
+                        #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                        #            datatype=datatypes.Datatypes.SPIKES, label='kde_end')
 
                         # for weight, position in zip(query_result.query_weights, query_result.query_positions):
                         #     self.write_record(realtime_base.RecordIDs.ENCODER_QUERY,
@@ -453,6 +454,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                         self.current_pos,self.current_vel,self.encoding_spike,
                                         self.crit_ind,self.decoder_number,
                                         *query_result.query_hist)
+                        #print('query hist shape',query_result.query_hist.shape)
 
                         # weights have constantly changing size and are very small numbers - how to get # marks??
                         #print('weights',query_result.query_weights)
@@ -476,7 +478,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     else:
                         # in the future, do we want to write a record if received spike but didn't decode?
                         # (occurs when there aren't enough spikes within the n-cube surrounding the received spike)
-                        pass
+                        self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
+                                        datapoint.timestamp,
+                                        datapoint.elec_grp_id,
+                                        amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
+                                        self.current_pos,self.current_vel,self.encoding_spike,
+                                        self.crit_ind,self.decoder_number,
+                                        *np.zeros(41))
 
                     # this adds the current spike to the R Star Tree
                     # to turn off adding spike, comment out "new_mark" below
@@ -491,9 +499,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 
-                        self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=
-                                           datapoint.elec_grp_id,
-                                           datatype=datatypes.Datatypes.SPIKES, label='spk_enc')
+                        #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=
+                        #        datapoint.elec_grp_id,datatype=datatypes.Datatypes.SPIKES, label='spk_enc')
                         pass
 
                 if self.spk_counter % 1000 == 0:
