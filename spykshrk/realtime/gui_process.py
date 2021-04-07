@@ -798,7 +798,7 @@ class DecodingResultsWindow(QMainWindow):
             # bottom row - state
             self.state_plots[ii] = self.graphics_widget.addPlot(
                 1, ii, 1, 1,
-                labels={'left':'Position bin', 'bottom':'Time (sec)'})
+                labels={'left':'Probability', 'bottom':'Time (sec)'})
             self.state_plots[ii].addLegend(offset=None)
             self.state_plots[ii].setRange(yRange=[0, 2])
             self.state_plots[ii].setMenuEnabled(False)
