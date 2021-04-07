@@ -26,10 +26,10 @@ def main(argv):
             config_filename = arg
 
     config = json.load(open(config_filename, 'r'))
-    prefix = config['file']['prefix']
+    prefix = config['files']['prefix']
     # the last process to reach this point will determine what the prefix is set to.
     # all record files will end up having the same prefix
-    config['file']['prefix'] = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_') + prefix
+    config['files']['prefix'] = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_') + prefix
 
     # setup MPI
     comm = MPI.COMM_WORLD  # type: MPI.Comm
