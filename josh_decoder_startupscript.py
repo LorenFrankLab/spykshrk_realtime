@@ -11,6 +11,7 @@ from mpi4py import MPI
 from spykshrk.realtime import (main_process, ripple_process, encoder_process,
                                decoder_process, gui_process)
 from spykshrk.realtime.simulator import simulator_process
+from spykshrk.realtime.postprocessing import rec_merge_hdf5
 
 def main(argv):
     
@@ -26,6 +27,10 @@ def main(argv):
             config_filename = arg
 
     config = json.load(open(config_filename, 'r'))
+    prefix = config['files']['prefix']
+    # the last process to reach this point will determine what the prefix is set to.
+    # all record files will end up having the same prefix
+    config['files']['prefix'] = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_') + prefix
 
     # setup MPI
     comm = MPI.COMM_WORLD  # type: MPI.Comm
@@ -75,6 +80,10 @@ def main(argv):
         # MPI is not running or is running on a single node.  Single processor mode
         pass
 
+    # make sure config is fully updated for all ranks (we modified it by
+    # prepending the time/date to the prefix)
+    comm.Barrier()
+
     # Make sure output directory exists
     os.makedirs(os.path.join(config['files']['output_dir']), exist_ok=True)
     
@@ -104,6 +113,11 @@ def main(argv):
         logging.info(f"Rank {rank} finished main loop, exiting main")
     else:
         logging.info(f"Rank {rank} could not start up in main correctly")
+
+    if rank == 0:
+        logging.info("Beginning merge script")
+        rec_merge_hdf5.main(argv, config=config)
+        logging.info("Finished merge script")
 
 if __name__ == "__main__":
     main(sys.argv[1:])
