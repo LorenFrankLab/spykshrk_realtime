@@ -2,6 +2,7 @@ import os
 import fcntl
 import math
 import struct
+from time import time_ns
 
 import numpy as np
 import pandas as pd
@@ -902,6 +903,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.well_2_x = self.config['head_direction']['well_pos'][1][0]
         self.well_2_y = self.config['head_direction']['well_pos'][1][1]
 
+        self.ub = 0
+        self.retrieve_lat = np.zeros(1000000)
+        self.retrieve_lat_ind = 0
+        self.overall_lat = np.zeros(1000000)
+        self.overall_lat_ind = 0
+
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
         self.pos_interface.register_datatype_channel(-1)
@@ -952,6 +959,22 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         time = MPI.Wtime()
 
         if spike_dec_msg is not None:
+            t_retrieve = time_ns()
+            if self.retrieve_lat_ind == self.retrieve_lat.shape[0]:
+                self.retrieve_lat = np.hstack((
+                    self.retrive_lat,
+                    np.zeros(self.retrieve_lat.shape[0])
+                ))
+            self.retrieve_lat[self.retrieve_lat_ind] = t_retrieve - spike_dec_msg.send_time
+            self.retrieve_lat_ind += 1
+
+            if self.overall_lat_ind == self.overall_lat.shape[0]:
+                self.overall_lat = np.hstack((
+                    self.overall_lat,
+                    np.zeros(self.overall_lat.shape[0])
+                ))
+            self.overall_lat[self.overall_lat_ind] = self.ub - spike_dec_msg.timestamp
+            self.overall_lat_ind += 1
 
             # about to overwrite circular buffer from beginning so update stats
             if self.decoded_spike_counter > 0 and self.buff_ind == 0:
@@ -995,6 +1018,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             self.lfp_timekeeper_counter += 1
             self.decoder_timestamp = lfp_timekeeper.timestamp
             #print(lfp_timekeeper.timestamp)
+
+            self.ub = self.decoder_timestamp - (self.decoder_bin_delay-2)*self.time_bin_size
 
             if self.lfp_timekeeper_counter % 1000 == 0:
                 print(self.rank,'total spikes:',self.decoded_spike_counter,
@@ -1247,6 +1272,23 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         else:
             self.class_log.debug(f"Received message of unknown type {type(message)}, ignoring")
 
+    def save_data(self):
+        retrieve_lat_ms = self.retrieve_lat[:self.retrieve_lat_ind] / 1e6
+        retrieve_lat_filename = os.path.join(
+            self.config['files']['output_dir'],
+            self.config['files']['prefix'] + f'_decoder_retrieve_lat_ms.{self.rank:02d}'
+        )
+        np.save(retrieve_lat_filename, retrieve_lat_ms)
+
+        overall_lat_ms = self.overall_lat[:self.overall_lat_ind] / 30
+        overall_lat_filename = os.path.join(
+            self.config['files']['output_dir'],
+            self.config['files']['prefix'] + f'_decoder_overall_lat_ms.{self.rank:02d}'
+        )
+        np.save(overall_lat_filename, overall_lat_ms)
+
+        self.class_log.debug("Wrote latency files")
+
 
 class BayesianDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
     def __init__(self, rank, config, local_rec_manager, send_interface: DecoderMPISendInterface,
@@ -1330,6 +1372,9 @@ class BayesianDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
             pass
             # self.class_log.debug(spike_dec_msg)
+
+    def save_data(self):
+        pass
 
 
 ##########################################################################
@@ -1416,5 +1461,6 @@ class DecoderProcess(realtime_base.RealtimeProcess):
             self.class_log.info(
                 'Terminating DecoderProcess (rank: {:})'.format(self.rank))
 
+        self.dec_man.save_data()
         # can try to save firing rate dict to a json file here
         self.class_log.info("Decoding Process reached end, exiting.")
