@@ -22,7 +22,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "fred_04062021_run1_play2",
+        "prefix": "fred_04082021_run2",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -154,7 +154,7 @@
         "trans_mat_uniform_gain": 1,
         "trans_mat_smoother_std": 3,
         "circle_buffer": 1000,
-        "bin_delay": 3
+        "bin_delay": 5
     },
 
     "trodes_network": {
