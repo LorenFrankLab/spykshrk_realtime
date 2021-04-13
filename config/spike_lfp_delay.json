@@ -1,17 +1,17 @@
 {
     "rank": {
-        "encoders": [0, 1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16, 17],
-        "decoder": [18]
+        "encoders": [0, 1, 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57],
+        "decoder": [58]
     },
 
     "trodes": {
         "voltage_scaling_factor" : 0.195,
-        "config_file": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/20210116_percy_06_r3/20210116_percy_06_r3.trodesconf"
+        "config_file": "/home/lorenlab/Trodes_Configs/64tetrodeDrive_03_2021.trodesconf"
     },
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "percy_1_16_run3_playback2",
+        "prefix": "fred_spike_delay",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -24,6 +24,6 @@
     },
 
     "trodes_network": {
-        "decoding_tetrodes": [1,8, 6, 15, 18, 28, 29, 31, 34, 36, 44, 46, 47, 51, 61, 48,54,59]
+        "decoding_tetrodes": [1,2,3,4,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,57,58,59,60,61,64]
     }
 }

@@ -3,6 +3,7 @@ import fcntl
 import struct
 import numpy as np
 import time
+from time import time_ns
 from mpi4py import MPI
 from threading import Thread, Timer, Event
 from spykshrk.realtime import realtime_base, realtime_logging, binary_record, datatypes, main_process
@@ -71,15 +72,16 @@ class NoSpikeTimerThread(Thread):
 ##########################################################################
 class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
 
-    _header_byte_fmt = '=qidqi'
+    _header_byte_fmt = '=qidqqi'
     _header_byte_len = struct.calcsize(_header_byte_fmt)
 
-    def __init__(self, timestamp, elec_grp_id, current_pos, cred_int, pos_hist):
+    def __init__(self, timestamp, elec_grp_id, current_pos, cred_int, pos_hist, send_time):
         self.timestamp = timestamp
         self.elec_grp_id = elec_grp_id
         self.current_pos = current_pos
         self.cred_int = cred_int
         self.pos_hist = pos_hist
+        self.send_time = send_time
 
     def pack(self):
         pos_hist_len = len(self.pos_hist)
@@ -91,6 +93,7 @@ class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
                                     self.elec_grp_id,
                                     self.current_pos,
                                     self.cred_int,
+                                    self.send_time,
                                     pos_hist_byte_len)
 
         message_bytes = message_bytes + self.pos_hist.tobytes()
@@ -99,13 +102,13 @@ class SpikeDecodeResultsMessage(realtime_logging.PrintableMessage):
 
     @classmethod
     def unpack(cls, message_bytes):
-        timestamp, elec_grp_id, current_pos, cred_int, pos_hist_len = struct.unpack(cls._header_byte_fmt,
+        timestamp, elec_grp_id, current_pos, cred_int, send_time, pos_hist_len = struct.unpack(cls._header_byte_fmt,
                                                                     message_bytes[0:cls._header_byte_len])
 
         pos_hist = np.frombuffer(message_bytes[cls._header_byte_len:cls._header_byte_len+pos_hist_len])
 
         return cls(timestamp=timestamp, elec_grp_id=elec_grp_id,
-                   current_pos=current_pos, cred_int=cred_int, pos_hist=pos_hist)
+                   current_pos=current_pos, cred_int=cred_int, pos_hist=pos_hist, send_time=send_time)
 
 
 ##########################################################################
@@ -286,6 +289,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
         time = MPI.Wtime()
 
+        self.encoder_lat = np.zeros(200000)
+        self.encoder_lat_ind = 0
+
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
         # to turn on, uncomment the line, self.thread.start()
@@ -324,7 +330,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         time = MPI.Wtime()
 
         msgs = self.spike_interface.__next__()
-
+        t0 = time_ns()
         if msgs is None:
             # No data avaliable but datastreams are still running, continue polling
             pass
@@ -332,8 +338,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
             datapoint = msgs[0]
             timing_msg = msgs[1]
             if isinstance(datapoint, SpikePoint):
-                # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                #                    datatype=datatypes.Datatypes.SPIKES, label='enc_recv')
+                #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                   datatype=datatypes.Datatypes.SPIKES, label='enc_recv')
+
                 #print("new spike: ",datapoint.timestamp,datapoint.data)
 
                 self.spk_counter += 1
@@ -375,9 +382,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                 #if datapoint.elec_grp_id == 7:
                 #    print('tet 7 marks:',amp_marks)
 
-                # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                #                    datatype=datatypes.Datatypes.SPIKES, label='kde_start')
-
+                #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                #                   datatype=datatypes.Datatypes.SPIKES, label='kde_start')
+                
                 # this looks up the current spike in the RStar Tree
                 # also filter out large noise events (start with 1500uV)
                 # turn off this filter because we remove duplicates in decoder process now
@@ -398,8 +405,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     #print('decoded spike',query_result.query_hist)
                     if query_result is not None:
 
-                        # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
-                        #             datatype=datatypes.Datatypes.SPIKES, label='kde_end')
+                        #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
+                        #            datatype=datatypes.Datatypes.SPIKES, label='kde_end')
 
                         # for weight, position in zip(query_result.query_weights, query_result.query_positions):
                         #     self.write_record(realtime_base.RecordIDs.ENCODER_QUERY,
@@ -428,6 +435,20 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                         #    print(self.crit_ind)
                         #    print(query_result.query_hist)
 
+
+                        self.mpi_send.send_decoded_spike(SpikeDecodeResultsMessage(timestamp=query_result.query_time,
+                                                                                elec_grp_id=query_result.elec_grp_id,
+                                                                                current_pos=self.current_pos,
+                                                                                cred_int=self.crit_ind,
+                                                                                pos_hist=query_result.query_hist,
+                                                                                send_time=time_ns()))
+                        t1 = time_ns()
+                        if self.encoder_lat_ind == self.encoder_lat.shape[0]:
+                            self.encoder_lat = np.hstack((self.encoder_lat, np.zeros(self.encoder_lat.shape[0])))
+                        self.encoder_lat[self.encoder_lat_ind] = (t1 - t0)
+                        self.encoder_lat_ind += 1
+                        #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
+
                         # save query_weights instead of query_hist: this will save number of spikes in rectangle
                         self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
                                         query_result.query_time,
@@ -436,19 +457,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                         self.current_pos,self.current_vel,self.encoding_spike,
                                         self.crit_ind,self.decoder_number,
                                         *query_result.query_hist)
+                        #print('query hist shape',query_result.query_hist.shape)
 
                         # weights have constantly changing size and are very small numbers - how to get # marks??
                         #print('weights',query_result.query_weights)
 
                         #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
                         #                   datatype=datatypes.Datatypes.SPIKES, label='spk_dec')
-
-                        self.mpi_send.send_decoded_spike(SpikeDecodeResultsMessage(timestamp=query_result.query_time,
-                                                                                elec_grp_id=query_result.elec_grp_id,
-                                                                                current_pos=self.current_pos,
-                                                                                cred_int=self.crit_ind,
-                                                                                pos_hist=query_result.query_hist))
-                        #print('decode sent_from manager: ',query_result.query_time,query_result.elec_grp_id)
 
                         # update spike_sent variable to True each time a spike is actually sent to decoder
                         # self.spike_sent = True
@@ -459,7 +474,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     else:
                         # in the future, do we want to write a record if received spike but didn't decode?
                         # (occurs when there aren't enough spikes within the n-cube surrounding the received spike)
-                        pass
+                        self.write_record(realtime_base.RecordIDs.ENCODER_OUTPUT,
+                                        datapoint.timestamp,
+                                        datapoint.elec_grp_id,
+                                        amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
+                                        self.current_pos,self.current_vel,self.encoding_spike,
+                                        self.crit_ind,self.decoder_number,
+                                        *np.zeros(41))
 
                     # this adds the current spike to the R Star Tree
                     # to turn off adding spike, comment out "new_mark" below
@@ -474,9 +495,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                         self.encoders[datapoint.elec_grp_id].new_mark(amp_marks)
 
-                        # self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=
-                        #                    datapoint.elec_grp_id,
-                        #                    datatype=datatypes.Datatypes.SPIKES, label='spk_enc')
+                        #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=
+                        #        datapoint.elec_grp_id,datatype=datatypes.Datatypes.SPIKES, label='spk_enc')
+                        pass
 
                 if self.spk_counter % 1000 == 0:
                     self.class_log.debug('Received {} spikes.'.format(self.spk_counter))
@@ -541,6 +562,14 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
                 if self.pos_counter % 1000 == 0:
                     self.class_log.info('Received {} pos datapoints.'.format(self.pos_counter))
+    
+    def save_data(self):
+        lat_ms = self.encoder_lat[:self.encoder_lat_ind] / 1e6
+        filepath = os.path.join(
+            self.config['files']['output_dir'],
+            self.config['files']['prefix'] + f'_encoder_lat_ms.{self.rank:02d}')
+        np.save(filepath, lat_ms)
+        self.class_log.debug("Wrote latencies to file")
     
     def process_gui_request_message(self, message):
         if isinstance(message, GuiEncoderParameterMessage):
@@ -621,4 +650,5 @@ class EncoderProcess(realtime_base.RealtimeProcess):
             self.class_log.info('Terminating EncodingProcess (rank: {:})'.format(self.rank))
 
         # self.enc_man.stopFlag.set()
+        self.enc_man.save_data()
         self.class_log.info("Encoding Process reached end, exiting.")
