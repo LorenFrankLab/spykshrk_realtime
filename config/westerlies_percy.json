@@ -22,7 +22,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "percy_1_16_run3_playback4",
+        "prefix": "percy_1_16_run3_playback5",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -31,7 +31,7 @@
 
     "trodes": {
         "voltage_scaling_factor": 0.195,
-        "config_file": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/20210116_percy_06_r3/20210116_percy_06_r3.trodesconf"
+        "config_file": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/percy_011621/20210116_percy_06_r3.trodesconf"
     },
  
     "ripple_conditioning": {
