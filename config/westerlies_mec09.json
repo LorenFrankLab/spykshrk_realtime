@@ -22,7 +22,7 @@
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "fred_04082021_run2",
+        "prefix": "fred_04132021_run1",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -54,7 +54,7 @@
         "condition_rip_thresh": 100,
         "shortcut_msg_lockout": 60000,
         "shortcut_msg_on" : true,
-        "center_well_position": [638,648],
+        "center_well_position": [634,648],
         "max_center_well_dist": 15,
         "enc_cred_int_max": 5,
         "min_unique_tets": 1,
@@ -159,6 +159,6 @@
 
     "trodes_network": {
         "decoding_tetrodes": [1,2,3,4,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,57,58,59,60,61,64],
-        "ripple_tetrodes": [1, 2]
+        "ripple_tetrodes": [1]
     }
 }
