@@ -577,12 +577,13 @@ class Dialog(QDialog):
                     self,
                     f"Message sent - Ripple velocity threshold value: {vel_thresh}",
                     kind="information")
-        except:
-            val = ripple_vel_thresh
-            show_message(
-                self,
-                "Ripple velocity threshold {val} could not be processed",
-                kind="critical")
+        except Exception as e:
+            print(e)
+            # val = ripple_vel_thresh
+            # show_message(
+            #     self,
+            #     e,
+            #     kind="critical")
 
     def check_encoding_vel_thresh(self):
         
