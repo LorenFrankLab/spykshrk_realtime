@@ -577,7 +577,7 @@ class Dialog(QDialog):
             self.send_main_params()
             show_message(
                 self,
-                f"Message sent - Ripple velocity threshold value: {vel_thresh}",
+                f"Message sent - Ripple velocity threshold value: {ripple_vel_thresh}",
                 kind="information")
         except Exception as e:
             print(e) # how do we get the string representation of the exception?
@@ -606,7 +606,7 @@ class Dialog(QDialog):
             self.send_decoder_params()
             show_message(
                 self,
-                f"Message sent - Encoding velocity threshold value: {vel_thresh}",
+                f"Message sent - Encoding velocity threshold value: {encoding_vel_thresh}",
                 kind="information")
         except:
             show_message(
