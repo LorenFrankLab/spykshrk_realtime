@@ -577,11 +577,13 @@ class Dialog(QDialog):
                     self,
                     f"Message sent - Ripple velocity threshold value: {vel_thresh}",
                     kind="information")
-        except:
-            show_message(
-                self,
-                "Ripple velocity threshold must be a non-negative number",
-                kind="critical")
+        except Exception as e:
+            print(e)
+            # val = ripple_vel_thresh
+            # show_message(
+            #     self,
+            #     e,
+            #     kind="critical")
 
     def check_encoding_vel_thresh(self):
         
@@ -903,11 +905,14 @@ class DecodingResultsWindow(QMainWindow):
             # can proceed
             self.comm.Barrier()
         else:
-            show_message(
-                self,
-                f"Message type {type(message)} received from main process, ignoring",
-                kind="information"
-            )
+            pass
+            # blocks event loop, which prevents decoder from streaming. maybe
+            # we should log this instead?
+            # show_message(
+            #     self,
+            #     f"Message type {type(message)} received from main process, ignoring",
+            #     kind="information"
+            # )
 
     def process_new_data(self):
         sender = self.mpi_status.source
