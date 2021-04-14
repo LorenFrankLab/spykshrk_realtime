@@ -566,23 +566,26 @@ class Dialog(QDialog):
         try:
             ripple_vel_thresh = float(ripple_vel_thresh)
             if ripple_vel_thresh < 0:
-                show_message(
-                    self,
-                    "Ripple velocity threshold cannot be a negative number",
-                    kind="critical")
-            else:
-                self.main_params.ripple_velocity_threshold = ripple_vel_thresh
-                self.send_main_params()
-                show_message(
-                    self,
-                    f"Message sent - Ripple velocity threshold value: {vel_thresh}",
-                    kind="information")
-        except:
-            val = ripple_vel_thresh
+                # show_message(
+                #     self,
+                #     "Ripple velocity threshold cannot be a negative number",
+                #     kind="critical")
+
+                ripple_vel_thresh = 0
+
+            self.main_params.ripple_velocity_threshold = ripple_vel_thresh
+            self.send_main_params()
             show_message(
                 self,
-                "Ripple velocity threshold {val} could not be processed",
-                kind="critical")
+                f"Message sent - Ripple velocity threshold value: {vel_thresh}",
+                kind="information")
+        except Exception as e:
+            print(e) # how do we get the string representation of the exception?
+            # val = ripple_vel_thresh
+            # show_message(
+            #     self,
+            #     e,
+            #     kind="critical")
 
     def check_encoding_vel_thresh(self):
         
@@ -590,19 +593,21 @@ class Dialog(QDialog):
         try:
             encoding_vel_thresh = float(encoding_vel_thresh)
             if encoding_vel_thresh < 0:
-                show_message(
-                    self,
-                    "Encoding velocity threshold cannot be a negative number",
-                    kind="critical")
-            else:
-                self.encoder_params.encoding_velocity_threshold = encoding_vel_thresh
-                self.decoder_params.encoding_velocity_threshold = encoding_vel_thresh
-                self.send_encoder_params()
-                self.send_decoder_params()
-                show_message(
-                    self,
-                    f"Message sent - Encoding velocity threshold value: {vel_thresh}",
-                    kind="information")
+                # show_message(
+                #     self,
+                #     "Encoding velocity threshold cannot be a negative number",
+                #     kind="critical")
+
+                encoding_vel_thresh = 0
+
+            self.encoder_params.encoding_velocity_threshold = encoding_vel_thresh
+            self.decoder_params.encoding_velocity_threshold = encoding_vel_thresh
+            self.send_encoder_params()
+            self.send_decoder_params()
+            show_message(
+                self,
+                f"Message sent - Encoding velocity threshold value: {vel_thresh}",
+                kind="information")
         except:
             show_message(
                 self,
