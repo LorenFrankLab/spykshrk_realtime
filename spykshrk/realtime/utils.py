@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import numpy as np
 
 def get_ntrode_inds(config, ntrode_ids):
     # ntrode_ids should be a list of integers
@@ -27,3 +28,9 @@ def get_network_address(config):
         return None
 
     return "tcp://" + address + ":" + port
+
+def normalize_to_probability(distribution):
+    '''Ensure the distribution integrates to 1 so that it is a probability
+    distribution
+    '''
+    return distribution / np.nansum(distribution)

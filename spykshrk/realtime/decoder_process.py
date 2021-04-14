@@ -14,6 +14,7 @@ from mpi4py import MPI
 from spykshrk.realtime import (binary_record, datatypes, encoder_process,
                                main_process, realtime_base)
 #from spykshrk.realtime import realtime_logging as rt_logging
+from spykshrk.realtime import utils
 from spykshrk.realtime import ripple_process
 from spykshrk.realtime.camera_process import (LinearPositionAssignment,
                                               VelocityCalculator)
@@ -21,6 +22,7 @@ from spykshrk.realtime.simulator import simulator_process
 from spykshrk.realtime.trodes_data import TrodesNetworkDataReceiver
 from spykshrk.realtime.realtime_base import BinaryRecordSendComplete, MPIMessageTag
 from spykshrk.realtime.gui_process import GuiDecoderParameterMessage
+from spykshrk.realtime.transitions import DISCRETE_TRANSITIONS, CONTINUOUS_TRANSITIONS
 
 
 ##########################################################################
@@ -786,11 +788,684 @@ class PointProcessDecoder(rt_logging.LoggingClass):
     def update_velocity_threshold(self, thresh):
         self.velocity_threshold = thresh
 
+# New objects
+class ClusterlessEstimator(rt_logging.LoggingClass):
+    def __init__(self, rank, config):
+        self.rank = rank
+        self.config = config
+        self.pos_range = [self.config['encoder']['position']['lower'],
+                          self.config['encoder']['position']['upper']]
+        self.pos_bins = self.config['encoder']['position']['bins']
+        self.time_bin_size = self.config['pp_decoder']['bin_size']
+        # is this used for anything?
+        self.arm_coor = self.config['encoder']['position']['arm_pos']
+
+
+        #self.uniform_gain = uniform_gain
+        self.uniform_gain = self.config['pp_decoder']['trans_mat_uniform_gain']
+
+        # get number outer arms from config
+        self.number_arms = self.config['pp_decoder']['number_arms']
+        self.ntrode_list = []
+        self.ntrode_list_array = []
+
+        self.cur_pos_time = -1
+        self.cur_pos = -1
+        self.cur_pos_ind = 0
+        self.pos_delta = (self.pos_range[1] -
+                          self.pos_range[0]) / self.pos_bins
+
+        self.current_spike_count = 0
+        self.spike_count_next = 0
+        self.total_decoded_spike_count = 0
+        self.pos_counter = 0
+        self.current_vel = 0
+        self.velocity_threshold = self.config['encoder']['vel']
+
+        self._ripple_thresh_states = {}
+
+        self.post_sum_bin_length = 20
+        self.posterior_sum_time_bin = np.zeros((self.post_sum_bin_length, 9))
+        self.posterior_sum_result = np.zeros((1, 9))
+
+        # make arm_coords conditional on number of arms
+        #if self.number_arms == 8:
+        #    self.arm_coords = np.array([[0, 8], [13, 24], [29, 40], [45, 56], [61, 72], [
+        #                           77, 88], [93, 104], [109, 120], [125, 136]])
+        #elif self.number_arms == 4:
+        #    self.arm_coords = np.array([[0,8],[13,24],[29,40],[45,56],[61,72]])
+        #elif self.number_arms == 2:
+        #   #sun god
+        #    #self.arm_coords = np.array([[0,8],[13,24],[29,40]])
+        #    #two bent arms
+        #    #self.arm_coords = np.array([[0,12],[17,41],[46,70]])
+
+        # now arm coords are defined in the config file
+        self.arm_coords = np.array(self.config['encoder']['arm_coords'])
+
+        self.max_pos = self.arm_coords[-1][-1] + 1
+        self.pos_bins_1 = np.arange(0, self.max_pos, 1)
+
+    @staticmethod
+    def _create_transition_matrix(pos_delta, num_bins, arm_coor, uniform_gain=0.01):
+
+        def gaussian(x, mu, sig):
+            return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+            # Setup transition matrix
+        x_bins = np.linspace(0, pos_delta * (num_bins - 1), num_bins)
+
+        transition_mat = np.ones([num_bins, num_bins])
+        for bin_ii in range(num_bins):
+            transition_mat[bin_ii, :] = gaussian(x_bins, x_bins[bin_ii], 3)
+
+        # uniform offset
+        uniform_dist = np.ones(transition_mat.shape)
+
+        # apply no-animal boundary
+
+        transition_mat = apply_no_anim_boundary(
+            x_bins, arm_coor, transition_mat)
+        uniform_dist = apply_no_anim_boundary(x_bins, arm_coor, uniform_dist)
+
+        # normalize transition matrix
+        transition_mat = transition_mat / (transition_mat.sum(axis=0)[None, :])
+        transition_mat[np.isnan(transition_mat)] = 0
+
+        # normalize uniform offset
+        uniform_dist = uniform_dist / (uniform_dist.sum(axis=0)[None, :])
+        uniform_dist[np.isnan(uniform_dist)] = 0
+
+        # apply uniform offset
+        transition_mat = transition_mat * \
+            (1 - uniform_gain) + uniform_dist * uniform_gain
+
+        return transition_mat
+
+    @staticmethod
+    def _sungod_transition_matrix(self,uniform_gain,arm_coords,max_pos,pos_bins_1,number_arms):
+
+        # NOTE: by rounding up for binning position of outer arms, we get no position in first bin of each arm
+        # we could just move the first position here in arm coords and then each arm will start 1 bin higher
+        # based on looking at counts from position this should work, so each arm is 11 units
+
+        uniform_gain = uniform_gain
+        arm_coords = arm_coords
+        max_pos = max_pos
+        pos_bins = pos_bins_1
+        number_arms = number_arms
+
+        # this for tri-diagonal matrix
+        # from scipy.sparse import diags
+        # n = len(pos_bins)
+        # transition_mat = np.zeros([n, n])
+        # k = np.array([(1/3) * np.ones(n - 1), (1/3) *
+        #               np.ones(n), (1 / 3) * np.ones(n - 1)])
+        # offset = [-1, 0, 1]
+        # transition_mat = diags(k, offset).toarray()
+        # box_end_bin = arm_coords[0, 1]
+
+        # if number_arms == 8:
+        #     for x in arm_coords[:, 0]:
+        #         transition_mat[int(x), int(x)] = (5/9)
+        #         transition_mat[box_end_bin, int(x)] = (1/9)
+        #         transition_mat[int(x), box_end_bin] = (1/9)
+
+        # elif number_arms == 4:
+        #     for x in arm_coords[:,0]:
+        #         transition_mat[int(x),int(x)] = (7/15)
+        #         transition_mat[box_end_bin,int(x)] = (1/5)
+        #         transition_mat[int(x),box_end_bin] = (1/5)
+
+        # elif number_arms == 2:
+        #     for x in arm_coords[:,0]:
+        #         transition_mat[int(x),int(x)] = (1/3)
+        #         transition_mat[box_end_bin,int(x)] = (1/3)
+        #         transition_mat[int(x),box_end_bin] = (1/3)
+
+
+        # for y in arm_coords[:, 1]:
+        #     transition_mat[int(y), int(y)] = (2 / 3)
+
+        # transition_mat[box_end_bin, 0] = 0
+        # transition_mat[0, box_end_bin] = 0
+        # transition_mat[box_end_bin, box_end_bin] = 0
+        # transition_mat[0, 0] = (2 / 3)
+
+        # if number_arms == 8:
+        #     transition_mat[box_end_bin - 1, box_end_bin - 1] = (5/9)
+        #     transition_mat[box_end_bin - 1, box_end_bin] = (1/9)
+        #     transition_mat[box_end_bin, box_end_bin - 1] = (1/9)
+
+        # elif number_arms == 4:
+        #     transition_mat[box_end_bin-1, box_end_bin-1] = (7/15)
+        #     transition_mat[box_end_bin-1,box_end_bin] = (1/5)
+        #     transition_mat[box_end_bin, box_end_bin-1] = (1/5)
+
+        # elif number_arms == 2:
+        #     transition_mat[box_end_bin-1, box_end_bin-1] = (1/3)
+        #     transition_mat[box_end_bin-1,box_end_bin] = (1/3)
+        #     transition_mat[box_end_bin, box_end_bin-1] = (1/3)
+
+        # # uniform offset (gain, currently 0.0001)
+        # # 9-1-19 this is now taken from config file
+        # #uniform_gain = 0.0001
+        # uniform_dist = np.ones(transition_mat.shape) * uniform_gain
+
+        # # apply uniform offset
+        # transition_mat = transition_mat + uniform_dist
+
+        # # apply no animal boundary - make gaps between arms
+        # transition_mat = self.apply_no_anim_boundary(
+        #     pos_bins, arm_coords, transition_mat)
+
+        # # to smooth: take the transition matrix to a power
+        # transition_mat = np.linalg.matrix_power(transition_mat, 1)
+
+        # # normalize transition matrix
+        # transition_mat = transition_mat / (transition_mat.sum(axis=0)[None, :])
+
+        # transition_mat[np.isnan(transition_mat)] = 0
+
+        # this is for flat transition matrix
+        n = len(pos_bins)
+        transition_mat = np.zeros([n, n]) 
+        uniform_dist = np.ones(transition_mat.shape) * uniform_gain
+
+        # apply uniform offset
+        transition_mat = transition_mat + uniform_dist
+
+        # apply no animal boundary - make gaps between arms
+        transition_mat = self.apply_no_anim_boundary(
+            pos_bins, arm_coords, transition_mat)
+
+        # to smooth: take the transition matrix to a power
+        transition_mat = np.linalg.matrix_power(transition_mat, 1)
+
+        # normalize transition matrix
+        transition_mat = transition_mat / (transition_mat.sum(axis=0)[None, :])
+
+        transition_mat[np.isnan(transition_mat)] = 0
+
+        return transition_mat
+
+    def apply_no_anim_boundary(self, x_bins, arm_coor, image, fill=0):
+        # from util.py script in offline decoder folder
+
+        # calculate no-animal boundary
+        arm_coor = np.array(arm_coor, dtype='float64')
+        arm_coor[:, 0] -= x_bins[1] - x_bins[0]
+        bounds = np.vstack([[x_bins[-1], 0], arm_coor])
+        bounds = np.roll(bounds, -1)
+
+        boundary_ind = np.searchsorted(x_bins, bounds, side='right')
+        #boundary_ind[:,1] -= 1
+
+        for bounds in boundary_ind:
+            if image.ndim == 1:
+                image[bounds[0]:bounds[1]] = fill
+            elif image.ndim == 2:
+                image[bounds[0]:bounds[1], :] = fill
+                image[:, bounds[0]:bounds[1]] = fill
+        return image
+
+    def select_ntrodes(self, ntrode_list):
+        #self.ntrode_list = ntrode_list
+        # sel ntode list based on config for decoder rank
+        if self.rank == self.config['rank']['decoder'][0]:
+            self.ntrode_list = self.config['tetrode_split']['1st_half']
+        elif self.rank == self.config['rank']['decoder'][1]:
+            self.ntrode_list = self.config['tetrode_split']['2nd_half']
+        print('decoder rank',self.rank,'decoder ntrode list',self.ntrode_list)
+
+        self.firing_rate = {elec_grp_id: np.ones(self.pos_bins)
+                            for elec_grp_id in self.ntrode_list}
+        #print('tetrode list',self.ntrode_list,len(self.ntrode_list))
+        self.tetrodes_with_spikes = np.zeros(
+            (1, len(self.ntrode_list)), dtype=np.bool)
+        self.tets_with_spikes_next = np.zeros(
+            (1, len(self.ntrode_list)), dtype=np.bool)
+        self.ntrode_list_array = np.asarray(self.ntrode_list)
+
+    # MEC: added encoding velocity filter and taskstate
+    # firing rate is later used to calculate prob_no_spike
+
+    # if you want to do correct prob_no_spike calculation then you
+    # need to keep track of tetrodes here each time you add a spike
+    # should we multiply by prob_no_spike for each tetrode with a spike??
+    def add_observation(self, spk_elec_grp_id, spk_pos_hist, vel_data, taskState):
+        self.taskState = taskState
+        if abs(vel_data) >= self.velocity_threshold and self.taskState == 1:
+            #print('firing rate vel thresh',vel_data,'tetrode',spk_elec_grp_id)
+            self.firing_rate[spk_elec_grp_id][self.cur_pos_ind] += 1
+
+        tet_fr_norm = self.firing_rate[spk_elec_grp_id] / self.firing_rate[spk_elec_grp_id].sum()
+            # MEC normalize self.occ to match calcuation in offline decoder
+            # MEC 9-3-19 to turn off prob_no_spike
+            #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+        prob_no_spike = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+                                           tet_fr_norm / (self.occ / np.nansum(self.occ)))
+        prob_no_spike[np.isnan(prob_no_spike)] = 0.0
+
+        self.observation *= spk_pos_hist
+        #print('decoded spike',spk_pos_hist)
+        # print('observation',self.observation)
+        # add 10-16-20: multiply obs by prob_no_spike for that tetrode
+        self.observation *= prob_no_spike
+        # MEC: i think this should be normalized, not divided by max????
+        #self.observation = self.observation / np.max(self.observation)
+        # 10-16-20 try normalize instead
+        self.observation = self.observation / self.observation.sum()
+        #print('observation',self.observation)
+        self.current_spike_count += 1
+        self.total_decoded_spike_count += 1
+        # add marker for tet with observation
+        #print('tetrode',spk_elec_grp_id,'tetrode list',self.ntrode_list_array)
+        self.tetrodes_with_spikes[0][np.where(
+            self.ntrode_list_array == spk_elec_grp_id)] = True
+
+    def update_position(self, pos_timestamp, pos_data, vel_data, taskState):
+        # Convert position to bin index in histogram count
+        # MEC: added NaN mask with no_anim_boundary
+        self.cur_pos_time = pos_timestamp
+        self.cur_pos = pos_data
+        self.cur_vel = vel_data
+        self.taskState = taskState
+        #print('update position result:',self.cur_pos)
+        self.cur_pos_ind = int((self.cur_pos - self.pos_range[0]) /
+                               self.pos_delta)
+        #print('current position',self.cur_pos)
+        #print('pos index added to occupancy',self.cur_pos_ind)
+
+        if (abs(self.cur_vel) >= self.velocity_threshold and self.taskState == 1
+            and not self.config['ripple_conditioning']['load_encoding']):
+            # MEC test: add all positions to occupancy to compare to offline
+            # if abs(self.cur_vel) >= 0:
+            self.occ[self.cur_pos_ind] += 1
+            self.apply_no_anim_boundary(self.pos_bins_1, self.arm_coords, self.occ, np.nan)
+
+            # originally this was set to 10000
+            self.pos_counter += 1
+            if self.pos_counter % 100 == 0 and self.taskState == 2:
+                print('decoder occupancy: ',self.occ)
+                print(' occupancy shape: ',self.occ.shape)
+                print('number of position entries decode: ', self.pos_counter)
+                #print('firing rates', self.firing_rate)
+                #print('total decoded spikes', self.total_decoded_spike_count)
+
+        # if re-loading previous run, get occ from config
+        #elif self.taskState == 0:
+        elif self.config['ripple_conditioning']['load_encoding'] and self.pos_counter==0: 
+            #self.occ = np.asarray(self.config['encoder']['occupancy'])[0]
+            #self.occ = self.occ.astype('float64')
+            #self.apply_no_anim_boundary(self.pos_bins_1, self.arm_coords, self.occ, np.nan)
+            self.occ = np.load('/tmp/occupancy1.npy')
+            print('loaded decoder occupancy from tet 1')
+            self.pos_counter += 1
+
+        return self.occ
+
+    def calculate_posterior_arm_sum(self, posterior):
+        if posterior.ndim > 1:
+            posterior_1d = posterior.sum(axis=0) # marginalize over state
+        else:
+            posterior_1d = posterior
+
+        # calculate the sum of the decode for each arm (box, then arms 1-8)
+        # posterior is just an array 136 items long, so this should work
+
+        # for here just calculate sum for current posterior - do cumulative sum in main_process
+        # to turn off posterior sum, comment out for loop below
+        posterior_sum_result = np.zeros((1, 9))
+        #print('zeros shape: ',self.posterior_sum_result)
+
+        for region_ind, (start_ind, stop_ind) in enumerate(self.arm_coords):
+            posterior_sum_result[0,region_ind] = posterior_1d[start_ind:stop_ind + 1].sum()
+            # print(self.posterior_sum_result)
+            #print('whole posterior sum',posterior.sum())
+        # posterior sum vector seems good - always adds to 1
+        # yes, i can find a ripple that doesnt sum to 1, but this line didnt display anything
+        if posterior_sum_result.sum() < 0.99:
+            print('posterior sum vector sum', posterior_sum_result.sum())
+        # print('posterior',posterior)
+
+        return posterior_sum_result
+
+    def update_velocity_threshold(self, thresh):
+        self.velocity_threshold = thresh
+
+
+class ClusterlessDecoder(ClusterlessEstimator):
+    def __init__(self, rank, config):
+        super().__init__(rank, config)
+        # Initialize major PP variables
+        self.observation = np.ones(self.pos_bins)
+        self.observation_next = np.ones(self.pos_bins)
+        self.occ = np.ones(self.pos_bins)
+        self.likelihood = np.ones(self.pos_bins)
+        self.posterior = np.ones(self.pos_bins)
+        self.prev_posterior = np.ones(self.pos_bins)
+        self.firing_rate = {}
+
+        # create sungod transition matrix
+        self.transition_mat = ClusterlessEstimator._sungod_transition_matrix(self,self.uniform_gain,self.arm_coords,
+                                                                            self.max_pos,self.pos_bins_1,
+                                                                            self.number_arms)
+
+    # original version
+    def increment_bin(self):
+
+        # Compute conditional intensity function (probability of no spike)
+        tets_with_no_spikes = self.ntrode_list_array[~self.tetrodes_with_spikes[0]]
+        #print('tets with no spikes',tets_with_no_spikes)
+        prob_no_spike = {}
+
+        # MEC: calculate global_prob_no only for missing tets
+        # global_prob_no = np.ones(self.pos_bins)
+        # for tet_id, tet_fr in self.firing_rate.items():
+        #     if tet_id in tets_with_no_spikes:
+        #         #print('tetrode with no spikes',tet_id)
+        #         # Normalize firing rate
+        #         tet_fr_norm = tet_fr / tet_fr.sum()
+        #         # MEC normalize self.occ to match calcuation in offline decoder
+        #         # MEC 9-3-19 to turn off prob_no_spike
+        #         #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+        #         prob_no_spike[tet_id] = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+        #                                        tet_fr_norm / (self.occ / np.nansum(self.occ)))
+        #         prob_no_spike[tet_id][np.isnan(prob_no_spike[tet_id])] = 0.0
+
+        #         # MEC: replace with prob_no_spike only for missing tets
+        #         global_prob_no *= prob_no_spike[tet_id]
+
+        # 10-13-20 use global prob no spike
+        global_prob_no = np.ones(self.pos_bins)
+        for tet_id, tet_fr in self.firing_rate.items():
+            # Normalize firing rate
+            tet_fr_norm = tet_fr / tet_fr.sum()
+            # MEC normalize self.occ to match calcuation in offline decoder
+            # MEC 9-3-19 to turn off prob_no_spike
+            #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+            prob_no_spike[tet_id] = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+                                           tet_fr_norm / (self.occ / np.nansum(self.occ)))
+            prob_no_spike[tet_id][np.isnan(prob_no_spike[tet_id])] = 0.0
+            #print('prob no spike',prob_no_spike[tet_id])
+
+            global_prob_no *= prob_no_spike[tet_id]   
+        #print('prob no spike',prob_no_spike)         
+        global_prob_no /= global_prob_no.sum()
+
+        # MEC print statement added
+        # if self.pos_counter % 10000 == 0:
+        #    print('global prob no spike: ',global_prob_no)
+
+        # Update last posterior
+        self.prev_posterior = self.posterior
+
+        # where should we introduce occupancy normalization of observation????
+
+        # Compute likelihood for previous bin with spikes
+        self.likelihood = self.observation * global_prob_no
+        # MEC: i think this should also be normalized
+        self.likelihood = self.likelihood / self.likelihood.sum()
+        # print('observation',self.observation)
+
+        # Compute posterior
+        # MEC: switch to nansum
+        self.posterior = self.likelihood * \
+            (self.transition_mat @ self.prev_posterior)
+        #self.posterior = self.likelihood * np.nansum(self.transition_mat * self.prev_posterior,axis=1)
+        # Normalize
+        # MEC: switch to nansum
+        self.posterior = self.posterior / self.posterior.sum()
+        #self.posterior = self.posterior / np.nansum(self.posterior)
+
+        # print('likelihood',self.likelihood,np.sum(self.likelihood))
+        # Save resulting posterior
+        # self.record.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
+        #                          self.current_time_bin * self.time_bin_size,
+        #                          *self.posterior)
+
+        # reset values for next observation
+        self.current_spike_count = 0
+        # np.ones is resetting the observation array for the next time bin
+        # observation is filled with deocoded spikes above in add_observation
+        self.observation = np.ones(self.pos_bins)
+        self.tetrodes_with_spikes = np.zeros(
+            (1, len(self.ntrode_list)), dtype=np.bool)
+
+        return self.posterior, self.likelihood
+
+    
+    def increment_no_spike_bin(self):
+
+        prob_no_spike = {}
+        global_prob_no = np.ones(self.pos_bins)
+        for tet_id, tet_fr in self.firing_rate.items():
+            # Normalize firing rate
+            tet_fr_norm = tet_fr / tet_fr.sum()
+            # MEC normalize self.occ to match calcuation in offline decoder
+            # MEC 9-3-19 to turn off prob_no_spike
+            #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+            prob_no_spike[tet_id] = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+                                           tet_fr_norm / (self.occ / np.nansum(self.occ)))
+            prob_no_spike[tet_id][np.isnan(prob_no_spike[tet_id])] = 0.0
+            #print('prob no spike',prob_no_spike[tet_id])
+
+            global_prob_no *= prob_no_spike[tet_id]
+        global_prob_no /= global_prob_no.sum()
+
+        # MEC print statement added
+        # if self.pos_counter % 10 == 0:
+        #    print('global prob no spike: ',global_prob_no)
+        #    print('norm occupancy',self.occ / np.nansum(self.occ))
+
+        # Compute likelihood for all previous 0 spike bins
+        # update last posterior
+        self.prev_posterior = self.posterior
+
+        # Compute no spike likelihood
+        # for prob_no in prob_no_spike.values():
+        #    self.likelihood *= prob_no
+        self.likelihood = global_prob_no
+
+        # Compute posterior for no spike
+        self.posterior = self.likelihood * (
+            self.transition_mat @ self.prev_posterior)
+        # Normalize
+        self.posterior = self.posterior / self.posterior.sum()
+
+        # print('likelihood',self.likelihood,np.sum(self.likelihood))
+
+        # we can save the no spike likelihood here
+        # QUESTION: what happens to the likelihood and the posterior during long times of no spike??
+
+        return self.posterior, self.likelihood
+
+class ClusterlessClassifier(ClusterlessEstimator):
+    def __init__(self, rank, config):
+        super().__init__(rank, config)
+        # Initialize major PP variables
+        n_states = len(self.config['pp_classifier']['state_labels'])
+        n_bins = int(self.arm_coords.max() - self.arm_coords.min() + 1)
+        self.observation = np.ones(self.pos_bins)
+        self.observation_next = np.ones(self.pos_bins)
+        self.occ = np.ones(self.pos_bins)
+        self.likelihood = np.ones(self.pos_bins)
+        self.posterior = utils.normalize_to_probability(
+            np.ones((n_states, self.pos_bins)))
+        self.prev_posterior = np.ones((n_states, self.pos_bins))
+        self.firing_rate = {}
+
+        dtt = self.config['pp_classifier']['discrete_transition']['type'][0]
+        diag = self.config['pp_classifier']['discrete_transition']['diagonal']
+        self.discrete_state_transition = DISCRETE_TRANSITIONS[dtt](n_states, diag)
+
+        ctt = self.config['pp_classifier']['continuous_transition']['type']
+        cm_per_bin = self.config['pp_classifier']['continuous_transition']['cm_per_bin']
+        sigma = self.config['pp_classifier']['continuous_transition']['gaussian_std']
+        self.continuous_state_transition = np.zeros(
+            (n_states, n_states, n_bins, n_bins))
+        for row_ind, row in enumerate(ctt):
+            for col_ind, transition_type in enumerate(row):
+                self.continuous_state_transition[row_ind, col_ind] = (
+                    CONTINUOUS_TRANSITIONS[transition_type](
+                        self.arm_coords, cm_per_bin, sigma
+                    )
+                )
+
+    def increment_bin(self):
+
+        # Compute conditional intensity function (probability of no spike)
+        tets_with_no_spikes = self.ntrode_list_array[~self.tetrodes_with_spikes[0]]
+        #print('tets with no spikes',tets_with_no_spikes)
+        prob_no_spike = {}
+
+        # MEC: calculate global_prob_no only for missing tets
+        # global_prob_no = np.ones(self.pos_bins)
+        # for tet_id, tet_fr in self.firing_rate.items():
+        #     if tet_id in tets_with_no_spikes:
+        #         #print('tetrode with no spikes',tet_id)
+        #         # Normalize firing rate
+        #         tet_fr_norm = tet_fr / tet_fr.sum()
+        #         # MEC normalize self.occ to match calcuation in offline decoder
+        #         # MEC 9-3-19 to turn off prob_no_spike
+        #         #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+        #         prob_no_spike[tet_id] = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+        #                                        tet_fr_norm / (self.occ / np.nansum(self.occ)))
+        #         prob_no_spike[tet_id][np.isnan(prob_no_spike[tet_id])] = 0.0
+
+        #         # MEC: replace with prob_no_spike only for missing tets
+        #         global_prob_no *= prob_no_spike[tet_id]
+
+        # 10-13-20 use global prob no spike
+        global_prob_no = np.ones(self.pos_bins)
+        for tet_id, tet_fr in self.firing_rate.items():
+            # Normalize firing rate
+            tet_fr_norm = tet_fr / tet_fr.sum()
+            # MEC normalize self.occ to match calcuation in offline decoder
+            # MEC 9-3-19 to turn off prob_no_spike
+            #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+            prob_no_spike[tet_id] = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+                                           tet_fr_norm / (self.occ / np.nansum(self.occ)))
+            prob_no_spike[tet_id][np.isnan(prob_no_spike[tet_id])] = 0.0
+            #print('prob no spike',prob_no_spike[tet_id])
+
+            global_prob_no *= prob_no_spike[tet_id]   
+        #print('prob no spike',prob_no_spike)         
+        global_prob_no /= global_prob_no.sum()
+
+        # MEC print statement added
+        # if self.pos_counter % 10000 == 0:
+        #    print('global prob no spike: ',global_prob_no)
+
+        # Update last posterior
+        self.prev_posterior = self.posterior
+
+        # where should we introduce occupancy normalization of observation????
+
+        # Compute likelihood for previous bin with spikes
+        self.likelihood = self.observation * global_prob_no
+        # MEC: i think this should also be normalized
+        self.likelihood = self.likelihood / self.likelihood.sum()
+        # print('observation',self.observation)
+
+        # Compute posterior
+        n_states = self.posterior.shape[0]
+        n_bins = self.likelihood.shape[0]
+        prior = np.zeros((n_states, n_bins))
+        self.posterior = np.zeros_like(prior)
+
+        for state_k in np.arange(n_states):
+            for state_k_1 in np.arange(n_states):
+                prior[state_k] += (
+                    self.discrete_state_transition[state_k_1, state_k] *
+                    self.prev_posterior[state_k_1] @
+                    self.continuous_state_transition[state_k_1, state_k]
+                )
+        self.posterior = utils.normalize_to_probability(
+            prior * self.likelihood)
+
+        # print('likelihood',self.likelihood,np.sum(self.likelihood))
+        # Save resulting posterior
+        # self.record.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
+        #                          self.current_time_bin * self.time_bin_size,
+        #                          *self.posterior)
+
+        # reset values for next observation
+        self.current_spike_count = 0
+        # np.ones is resetting the observation array for the next time bin
+        # observation is filled with deocoded spikes above in add_observation
+        self.observation = np.ones(self.pos_bins)
+        self.tetrodes_with_spikes = np.zeros(
+            (1, len(self.ntrode_list)), dtype=np.bool)
+
+        return self.posterior, self.likelihood
+
+    def increment_no_spike_bin(self):
+
+        prob_no_spike = {}
+        global_prob_no = np.ones(self.pos_bins)
+        for tet_id, tet_fr in self.firing_rate.items():
+            # Normalize firing rate
+            tet_fr_norm = tet_fr / tet_fr.sum()
+            # MEC normalize self.occ to match calcuation in offline decoder
+            # MEC 9-3-19 to turn off prob_no_spike
+            #prob_no_spike[tet_id] = np.ones(self.pos_bins)
+            prob_no_spike[tet_id] = np.exp(-self.time_bin_size / self.config['encoder']['sampling_rate'] *
+                                           tet_fr_norm / (self.occ / np.nansum(self.occ)))
+            prob_no_spike[tet_id][np.isnan(prob_no_spike[tet_id])] = 0.0
+            #print('prob no spike',prob_no_spike[tet_id])
+
+            global_prob_no *= prob_no_spike[tet_id]
+        global_prob_no /= global_prob_no.sum()
+
+        # MEC print statement added
+        # if self.pos_counter % 10 == 0:
+        #    print('global prob no spike: ',global_prob_no)
+        #    print('norm occupancy',self.occ / np.nansum(self.occ))
+
+        # Compute likelihood for all previous 0 spike bins
+        # update last posterior
+        self.prev_posterior = self.posterior
+
+        # Compute no spike likelihood
+        # for prob_no in prob_no_spike.values():
+        #    self.likelihood *= prob_no
+        self.likelihood = global_prob_no
+
+        # Compute posterior
+        n_states = self.posterior.shape[0]
+        n_bins = self.likelihood.shape[0]
+        prior = np.zeros((n_states, n_bins))
+        self.posterior = np.zeros_like(prior)
+
+        for state_k in np.arange(n_states):
+            for state_k_1 in np.arange(n_states):
+                prior[state_k] += (
+                    self.discrete_state_transition[state_k_1, state_k] *
+                    self.prev_posterior[state_k_1] @
+                    self.continuous_state_transition[state_k_1, state_k]
+                )
+        self.posterior = utils.normalize_to_probability(
+            prior * self.likelihood)
+
+        # print('likelihood',self.likelihood,np.sum(self.likelihood))
+
+        # we can save the no spike likelihood here
+        # QUESTION: what happens to the likelihood and the posterior during long times of no spike??
+
+        return self.posterior, self.likelihood
+
+
 
 class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
     def __init__(self, rank, config, local_rec_manager, send_interface: DecoderMPISendInterface,
                  spike_decode_interface: SpikeDecodeRecvInterface, pos_interface: realtime_base.DataSourceReceiver,
                  lfp_interface: LFPTimekeeperRecvInterface, gui_send_interface: DecoderGuiSendInterface):
+        if config['clusterless_estimator'] == 'pp_decoder':
+            state_labels = config['pp_decoder']['state_labels']
+        elif config['clusterless_estimator'] == 'pp_classifier':
+            state_labels = config['pp_classifier']['state_labels']
         super(PPDecodeManager, self).__init__(rank=rank,
                                               local_rec_manager=local_rec_manager,
                                               send_interface=send_interface,
@@ -806,7 +1481,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                           ['x{:0{dig}d}'.
                                                            format(x, dig=len(str(config['encoder']
                                                                                  ['position']['bins'])))
-                                                           for x in range(config['encoder']['position']['bins'])],
+                                                           for x in range(config['encoder']['position']['bins'])] + 
+                                                          [label for label in state_labels],
                                                           ['bin_timestamp', 'wall_time', 'real_pos', 'spike_count','dec_rank'] +
                                                           ['x{:0{dig}d}'.
                                                            format(x, dig=len(str(config['encoder']
@@ -819,9 +1495,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                            'linear_pos', 'velocity','dec_rank'] + ['x{:0{dig}d}'.
                                                                         format(x, dig=len(str(config['encoder']['position']['bins'])))
                                                                                 for x in range(config['encoder']['position']['bins'])]],
-                                              rec_formats=['qdddddddqqqqqddddddddddqqq' + 'd' * config['encoder']['position']['bins'],
-                                                           'qddqq' + 'd' *
-                                                           config['encoder']['position']['bins'],
+                                              rec_formats=['qdddddddqqqqqddddddddddqqq' 
+                                                            + 'd' * config['encoder']['position']['bins'] + 'd' * len(state_labels),
+                                                           'qddqq' + 'd' * config['encoder']['position']['bins'],
                                                            'qiii',
                                                            'qqqqqqqdddq' + 'd' * config['encoder']['position']['bins']])
         # i think if you change second q to d above, then you can replace real_pos_time
@@ -855,13 +1531,13 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
         self.current_time_bin = 0
         self.time_bin_size = self.config['pp_decoder']['bin_size']
-        self.pp_decoder = PointProcessDecoder(pos_range=[self.config['encoder']['position']['lower'],
-                                                         self.config['encoder']['position']['upper']],
-                                              pos_bins=self.config['encoder']['position']['bins'],
-                                              time_bin_size=self.time_bin_size,
-                                              arm_coor=self.config['encoder']['position']['arm_pos'],
-                                              uniform_gain=config['pp_decoder']['trans_mat_uniform_gain'],
-                                              config=self.config,rank=self.rank)
+
+        self.clusterless_estimator_type = config['clusterless_estimator']
+        if self.clusterless_estimator_type == 'pp_decoder':
+            self.clusterless_estimator = ClusterlessDecoder(self.rank, self.config)
+        elif self.clusterless_estimator_type == 'pp_classifier':
+            self.clusterless_estimator = ClusterlessClassifier(self.rank, self.config)
+
         # 7-2-19, added spike count for each decoding bin
         self.ripple_thresh_decoder = False
         self.replay_target_arm = self.config['ripple_conditioning']['replay_target_arm']
@@ -930,27 +1606,31 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         elif self.rank == self.config['rank']['decoder'][1]:
             self.ntrode_list = self.config['tetrode_split']['2nd_half']
         print('rank',self.rank,'manager ntrode list',self.ntrode_list)
-        self.pp_decoder.select_ntrodes(self.ntrode_list)
+        self.clusterless_estimator.select_ntrodes(self.ntrode_list)
 
     def update_posterior_stats(self):
+        if self.posterior.ndim > 1:
+            posterior_1d = self.posterior.sum(axis=0)
+        else:
+            posterior_1d = self.posterior
 
         # calculate arm sum, max, and cred interval
-        self.posterior_arm_sum = self.pp_decoder.calculate_posterior_arm_sum(self.posterior)
+        self.posterior_arm_sum = self.clusterless_estimator.calculate_posterior_arm_sum(posterior_1d)
 
         # add credible interval here and add to message
-        self.spxx = np.sort(self.posterior)[::-1]
+        self.spxx = np.sort(posterior_1d)[::-1]
         self.crit_ind = (np.nonzero(np.diff(np.cumsum(self.spxx) >= 0.95, prepend=False))[0] + 1)[0]
         #if spike_dec_msg is not None and self.msg_counter % 10000 == 0:
         #    print('credible interval',self.crit_ind)
 
         # calculate max position of posterior
-        self.posterior_max = self.posterior.argmax()
+        self.posterior_max = posterior_1d.argmax()
 
         # calculate sum of target segment
-        self.posterior_sum_target = self.posterior[self.config['ripple_conditioning']['replay_target'][0]:
+        self.posterior_sum_target = posterior_1d[self.config['ripple_conditioning']['replay_target'][0]:
                                             self.config['ripple_conditioning']['replay_target'][1] + 1].sum()
         # calculate sum of off-target segment
-        self.posterior_sum_offtarget = self.posterior[self.config['ripple_conditioning']['replay_offtarget'][0]:
+        self.posterior_sum_offtarget = posterior_1d[self.config['ripple_conditioning']['replay_offtarget'][0]:
                                             self.config['ripple_conditioning']['replay_offtarget'][1] + 1].sum()
 
     def process_next_data(self):
@@ -1100,7 +1780,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     spikes_in_bin = 0
                     for i in range(0, posterior_spikes.shape[0]):
                         spikes_in_bin += 1
-                        self.pp_decoder.add_observation(spk_elec_grp_id=posterior_spikes[i,1],
+                        self.clusterless_estimator.add_observation(spk_elec_grp_id=posterior_spikes[i,1],
                                                 spk_pos_hist=posterior_spikes[i,3:-1],
                                                 vel_data=self.current_vel, taskState=self.taskState)
 
@@ -1114,7 +1794,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
                     # run increment bin: to calculate like and posterior
 
-                    self.posterior, self.likelihood = self.pp_decoder.increment_bin()
+                    self.posterior, self.likelihood = self.clusterless_estimator.increment_bin()
 
                     # # record timing
                     # # should timestamp be something else?
@@ -1132,7 +1812,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     self.spike_timestamp = 0
 
                     # run increment no spike
-                    self.posterior, self.likelihood = self.pp_decoder.increment_no_spike_bin()    
+                    self.posterior, self.likelihood = self.clusterless_estimator.increment_no_spike_bin()
 
             # no spikes in time bin of interest
             else:
@@ -1141,7 +1821,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 self.spike_timestamp = 0
 
                 # run increment no spike
-                self.posterior, self.likelihood = self.pp_decoder.increment_no_spike_bin()
+                self.posterior, self.likelihood = self.clusterless_estimator.increment_no_spike_bin()
 
             self.update_posterior_stats()
             self.mpi_send.send_posterior_message(self.decoder_timestamp - self.decoder_bin_delay * self.time_bin_size,
@@ -1160,13 +1840,19 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # save to records
             self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
                               self.decoder_timestamp - self.decoder_bin_delay * self.time_bin_size,
-                              time, self.pp_decoder.cur_pos, self.spike_count, self.rank,
+                              time, self.clusterless_estimator.cur_pos, self.spike_count, self.rank,
                               *self.likelihood)
 
+            if self.clusterless_estimator_type == 'pp_decoder':
+                posterior = self.posterior
+                state_prob = [1]
+            elif self.clusterless_estimator_type == 'pp_classifier':
+                posterior = self.posterior.sum(axis=0)
+                state_prob = self.posterior.sum(axis=1)
             self.write_record(realtime_base.RecordIDs.DECODER_OUTPUT,
                               self.decoder_timestamp - self.decoder_bin_delay * self.time_bin_size,
                               time, self.current_vel,
-                              self.pp_decoder.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
+                              self.clusterless_estimator.cur_pos, self.raw_x, self.raw_y, self.smooth_x, self.smooth_y,
                               self.spike_count, self.used_next_bin, self.taskState,
                               self.ripple_thresh_decoder, self.ripple_number,
                               self.posterior_arm_sum[0][0], self.posterior_arm_sum[0][1],
@@ -1174,9 +1860,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                               self.posterior_arm_sum[0][5], self.posterior_arm_sum[0][6], self.posterior_arm_sum[0][7],
                               self.posterior_arm_sum[0][8], self.crit_ind, self.rank,
                               self.dropped_spikes, self.duplicate_spikes,
-                              *self.posterior)
+                              *posterior, *state_prob)
 
-            self.gui_send_interface.send_posterior(self.posterior)           
+            self.gui_send_interface.send_posterior(np.atleast_2d(self.posterior))
 
         # position and velocity loop
         pos_msg = self.pos_interface.__next__()
@@ -1186,7 +1872,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             pos_data = pos_msg[0]
             # print(pos_data)
             if not self.trodessource:
-                self.pp_decoder.update_position(
+                self.clusterless_estimator.update_position(
                     pos_timestamp=pos_data.timestamp, pos_data=pos_data.x, taskState=self.taskState)
             else:
                 # smooth position not velocity
@@ -1206,7 +1892,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 #current_pos = 0
 
                 # MEC added: return occupancy
-                occupancy = self.pp_decoder.update_position(pos_timestamp=pos_data.timestamp,
+                occupancy = self.clusterless_estimator.update_position(pos_timestamp=pos_data.timestamp,
                                                             pos_data=current_pos, vel_data=self.current_vel,
                                                             taskState=self.taskState)
 
@@ -1268,7 +1954,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
     def process_gui_request_message(self, message):
         if isinstance(message, GuiDecoderParameterMessage):
-            self.pp_decoder.update_velocity_threshold(message.encoding_velocity_threshold)
+            self.clusterless_estimator.update_velocity_threshold(message.encoding_velocity_threshold)
         else:
             self.class_log.debug(f"Received message of unknown type {type(message)}, ignoring")
 

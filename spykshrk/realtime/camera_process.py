@@ -16,7 +16,42 @@ import spykshrk.realtime.rst.RSTPython as RST
 
 # all of these functions need to pay attention to number of arms in config
 
-class LinearPositionAssignment:
+class LinearPositionAssignment(object):
+    def __init__(self, config):
+        self.config = config
+
+        # key: segment
+        # note that multiple segments can map to the same arm id (e.g. center well)
+        self.arm_ids = {}
+        for seg_ind, arm_id in enumerate(self.config['encoder']['arm_ids']):
+            self.arm_ids[seg_ind] = arm_id
+
+        arm_coords = self.config['encoder']['arm_coords']
+        n_segments = len(arm_coords)
+        self.bins = [None] * n_segments
+        self.bin_edges = [None] * n_segments
+        for arm_ind, (a, b) in enumerate(arm_coords):
+            # position bin bounds are [a, b] (inclusive)
+            self.bins[arm_ind] = np.arange(a, b+1)
+            self.bin_edges[arm_ind] = np.linspace(0, 1, (b-a+1)+1)
+
+    def assign_position(self, segment, segment_pos):
+        arm_id = self.arm_ids[segment]
+        bins = self.bins[arm_id]
+        bin_edges = self.bin_edges[arm_id]
+        if np.allclose(segment_pos, 0):
+            bin_ind = 0
+        elif np.allclose(segment_pos, 0):
+            bin_ind = len(bins) - 1
+        else:
+            bin_ind = np.searchsorted(bin_edges, segment_pos, side='right') - 1
+
+        if bin_ind > len(bins) - 1:
+            bin_ind = len(bins) - 1
+        return bins[bin_ind]
+
+
+class LinearPositionAssignmentOriginal:
     def __init__(self, config):
         self.config = config
         self.segment = 0
