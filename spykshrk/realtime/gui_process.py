@@ -903,6 +903,7 @@ class DecodingResultsWindow(QMainWindow):
             # can proceed
             self.comm.Barrier()
         else:
+            pass
             # blocks event loop, which prevents decoder from streaming. maybe
             # we should log this instead?
             # show_message(
