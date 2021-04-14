@@ -1642,7 +1642,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             t_retrieve = time_ns()
             if self.retrieve_lat_ind == self.retrieve_lat.shape[0]:
                 self.retrieve_lat = np.hstack((
-                    self.retrive_lat,
+                    self.retrieve_lat,
                     np.zeros(self.retrieve_lat.shape[0])
                 ))
             self.retrieve_lat[self.retrieve_lat_ind] = t_retrieve - spike_dec_msg.send_time
