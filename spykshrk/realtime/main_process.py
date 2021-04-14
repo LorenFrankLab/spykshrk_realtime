@@ -756,10 +756,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             self.shortcut_msg_on = message.shortcut_message_on
             self.instructive = message.instructive_task
             self.reward_mode = message.reward_mode
-            print('posterior threshold:', self.posterior_arm_threshold,
-                'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
-                'reward mode', self.reward_mode,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
-                'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
+            if self.decoder_1_count % 200 == 0:
+                print('posterior threshold:', self.posterior_arm_threshold,
+                    'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
+                    'reward mode', self.reward_mode,'shortcut:',self.shortcut_msg_on,'arm:',self.replay_target_arm,
+                    'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)
         else:
             self.class_log.info(f"Received message of unknown type {type(message)}, ignoring")
 
@@ -999,7 +1000,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         #print('decoder rank',self.dec_rank)
         # lets try 500 instead of 1500
         #if self.thresh_counter % 1500 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
-        if self.decoder_1_count % 200 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
+        if self.decoder_1_count % 400 == 0  and self.config['ripple_conditioning']['session_type'] == 'run':
             # if self.vel_pos_counter % 1000 == 0:
             #print('thresh_counter: ',self.thresh_counter)
 
@@ -1039,6 +1040,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     f.seek(-2, os.SEEK_CUR)
                 self.taskState = int(f.readline().decode()[0:1])
             print('main taskState:',self.taskState)
+
+            print('posterior threshold:', self.posterior_arm_threshold,
+                'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
+                'reward mode', self.reward_mode,'shortcut msg:',self.shortcut_msg_on,'target arm:',self.replay_target_arm,
+                'position limit:',self.position_limit,'well dist max (cm)',self.max_center_well_dist)            
 
         # to test shortcut message delay
         #if self.decoder_1_count % 800 == 0 and self.taskState == 1:

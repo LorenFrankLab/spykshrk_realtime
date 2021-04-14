@@ -6,23 +6,23 @@
         "supervisor": 0,
         "decoder": [1],
         "ripples": [2],
-        "encoders": [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60],
-        "gui" : 61
+        "encoders": [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50],
+        "gui" : 51
     },
 
     "rank_settings": {
-        "enable_rec": [0,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60],
+        "enable_rec": [0,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51],
         "enable_profiler": []
     },
 
     "tetrode_split": {
-        "1st_half": [1,2,3,4,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,57,58,59,60,61,64],
+        "1st_half": [1,2,3,4,6,7,8,9,10,11,13,14,15,16,17,19,20,21,22,24,25,26,28,29,30,31,32,35,38,39,41,42,43,45,46,47,48,50,52,53,54,55,56,57,58,59,61,64],
         "2nd_half": []
     },
 
     "files": {
         "output_dir": "/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/spykshrk_output",
-        "prefix": "fred_04082021_run2",
+        "prefix": "20210414_145745_fred_04142021_run2",
         "rec_postfix": "bin_rec",
         "profile_postfix": "pstats",
         "timing_postfix": "timing",
@@ -47,14 +47,14 @@
         "previous_spike_count_avg": 1.312,
         "previous_spike_count_std": 0.931,
         "number_of_decoders": 1,
-        "replay_target_arm": 1,
-        "replay_non_target_arm": [2],
-        "replay_target": [20,24],
-        "replay_offtarget": [36,40],
+        "replay_target_arm": 2,
+        "replay_non_target_arm": [1],
+        "replay_target": [36,40],
+        "replay_offtarget": [20,24],
         "condition_rip_thresh": 100,
         "shortcut_msg_lockout": 60000,
         "shortcut_msg_on" : true,
-        "center_well_position": [638,648],
+        "center_well_position": [634,648],
         "max_center_well_dist": 15,
         "enc_cred_int_max": 5,
         "min_unique_tets": 1,
@@ -138,6 +138,7 @@
         },
         "occupancy": [[0]],
         "arm_coords": [[0,8],[13,24],[29,40]],
+        "arm_ids": [0, 0, 1, 2],
         "cmperpx": 0.222
 
     },
@@ -148,17 +149,34 @@
         "bin_size": 30000
     },
 
+    "clusterless_estimator": "pp_decoder",
     "pp_decoder": {
         "number_arms": 2,
         "bin_size": 180,
         "trans_mat_uniform_gain": 1,
         "trans_mat_smoother_std": 3,
         "circle_buffer": 1000,
-        "bin_delay": 5
+        "bin_delay": 5,
+        "state_labels": ["state"]
+    },
+
+    "pp_classifier": {
+        "state_labels": ["stationary", "continuous", "fragmented"],
+        "discrete_transition": {
+            "type": ["strong_diagonal"],
+            "diagonal": 0.98
+        },
+        "continuous_transition": {
+            "type": [["identity", "random_walk", "uniform"],
+                     ["identity", "random_walk", "uniform"],
+                     ["uniform", "uniform", "uniform"]],
+            "cm_per_bin": 2.5,
+            "gaussian_std": 6
+        }
     },
 
     "trodes_network": {
-        "decoding_tetrodes": [1,2,3,4,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,57,58,59,60,61,64],
-        "ripple_tetrodes": [1, 2]
+        "decoding_tetrodes": [1,2,3,4,6,7,8,9,10,11,13,14,15,16,17,19,20,21,22,24,25,26,28,29,30,31,32,35,38,39,41,42,43,45,46,47,48,50,52,53,54,55,56,57,58,59,61,64],
+        "ripple_tetrodes": [1]
     }
 }
