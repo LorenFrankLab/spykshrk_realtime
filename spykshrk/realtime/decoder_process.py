@@ -1884,6 +1884,9 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 current_pos = self.linPosAssign.assign_position(
                     pos_data.segment, pos_data.position)
 
+                #assign raw x and y
+                self.raw_x = pos_data.x
+                self.raw_y = pos_data.y
                 # try turning off all of these calculations
                 #self.smooth_x = pos_data.x
                 #self.smooth_y = pos_data.y
