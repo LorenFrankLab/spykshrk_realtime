@@ -326,7 +326,14 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
                                     spike_count=message.spike_count, crit_ind=message.crit_ind,
                                     posterior_max=message.posterior_max, dec_rank=message.rank, 
                                     tet1=message.tet1,tet2=message.tet2,tet3=message.tet3,
-                                    tet4=message.tet4,tet5=message.tet5,
+                                    tet4=message.tet4,tet5=message.tet5,tet6=message.tet6,
+                                    tet7=message.tet7,tet8=message.tet8,tet9=message.tet9,
+                                    tet10=message.tet10, lk_argmax1=message.lk_argmax1,
+                                    lk_argmax2=message.lk_argmax2,lk_argmax3=message.lk_argmax3,
+                                    lk_argmax4=message.lk_argmax4,lk_argmax5=message.lk_argmax5,
+                                    lk_argmax6=message.lk_argmax6,lk_argmax7=message.lk_argmax7,
+                                    lk_argmax8=message.lk_argmax8,lk_argmax9=message.lk_argmax9,
+                                    lk_argmax10=message.lk_argmax10,
                                     networkclient=self.networkclient)
             #print('posterior sum message supervisor: ',message.spike_timestamp,time*1000)
             # return posterior_sum
@@ -579,7 +586,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_count_2 = 0
         self.spike_count_array_1 = np.zeros((self.post_sum_sliding_window,))
         self.spike_count_1 = 0
-        self.enc_cred_int_array = np.zeros((5,self.post_sum_sliding_window))
+        self.enc_cred_int_array = np.zeros((10,self.post_sum_sliding_window))
+        self.lk_argmaxes = np.zeros_like(self.enc_cred_int_array)
+        self.arm_bounds = self.config['ripple_conditioning']['target_arm_position']
         self.min_unique_tets = self.config['ripple_conditioning']['min_unique_tets']
         self.max_center_well_dist =  self.config['ripple_conditioning']['max_center_well_dist']
         self.center_well_dist_cm = 0
@@ -823,29 +832,37 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             if (self.taskState == 2 and self.shortcut_message_arm == self.replay_target_arm and
                 (self.bin_timestamp_1 > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
                 and self.reward_mode == "replay" and self.shortcut_msg_on and not self.instructive and 
-                self.center_well_proximity and 
-                np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0]>=self.min_unique_tets):
-                # NOTE: we can now replace this with the actual shortcut message!
-                networkclient.send_statescript_shortcut_message(14)
-                print('replay conditoning: statescript trigger 14')
+                self.center_well_proximity):
+                
+                mask = np.logical_and(
+                    self.lk_argmaxes >= self.arm_bounds[0],
+                    self.lk_argmaxes <= self.arm_bounds[1]
+                )
+                tetrode_ids = self.enc_cred_int_array[mask]
+                tetrode_ids = tetrode_ids[tetrode_ids != 0]
+                if np.unique(tetrode_ids).shape[0] >= self.min_unique_tets:
 
-                # old statescript message
-                # note: statescript can only execute one function at a time, so trigger function 15 and set replay_arm variable
-                #statescript_command = f'replay_arm = {self.shortcut_message_arm};\ntrigger(15);\n'
-                #print('string for statescript:',statescript_command)
-                #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', [statescript_command])
-                #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['replay_arm = 1;\ntrigger(15);\n'])
-                #print('sent StateScript message for arm', self.shortcut_message_arm,
-                #      'replay in ripple', self._lockout_count)
+                    # NOTE: we can now replace this with the actual shortcut message!
+                    networkclient.send_statescript_shortcut_message(14)
+                    print('replay conditoning: statescript trigger 14')
 
-                # arm replay counters, only active at wait well and adds to current counter and sets other arms to 0
-                # not using this counter currently
-                #print('arm replay count:', self.arm_replay_counter)
-                self.shortcut_message_sent = True
-                # original
-                #self._trodes_message_lockout_timestamp = self.lfp_timestamp
-                # 2 decoders
-                self._trodes_message_lockout_timestamp = self.bin_timestamp_1
+                    # old statescript message
+                    # note: statescript can only execute one function at a time, so trigger function 15 and set replay_arm variable
+                    #statescript_command = f'replay_arm = {self.shortcut_message_arm};\ntrigger(15);\n'
+                    #print('string for statescript:',statescript_command)
+                    #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', [statescript_command])
+                    #networkclient.sendMsgToModule('StateScript', 'StatescriptCommand', 's', ['replay_arm = 1;\ntrigger(15);\n'])
+                    #print('sent StateScript message for arm', self.shortcut_message_arm,
+                    #      'replay in ripple', self._lockout_count)
+
+                    # arm replay counters, only active at wait well and adds to current counter and sets other arms to 0
+                    # not using this counter currently
+                    #print('arm replay count:', self.arm_replay_counter)
+                    self.shortcut_message_sent = True
+                    # original
+                    #self._trodes_message_lockout_timestamp = self.lfp_timestamp
+                    # 2 decoders
+                    self._trodes_message_lockout_timestamp = self.bin_timestamp_1
 
             # # to make whitenoise for incorrect arm
             # elif (self.taskState == 2 and self.shortcut_message_arm == self.replay_non_target_arm
@@ -946,7 +963,12 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
     # MEC: this function sums the posterior during each ripple, then sends shortcut message
     # need to add location filter so it only sends message when rat is at rip/wait well - no, that is in statescript
-    def posterior_sum(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, dec_rank, tet1,tet2,tet3,tet4,tet5,networkclient):
+    def posterior_sum(
+        self, bin_timestamp, spike_timestamp, target, offtarget, box,
+        arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max,
+        dec_rank, tet1,tet2,tet3,tet4,tet5,tet6,tet7,tet8,tet9,tet10,
+        lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
+        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9,lk_argmax10, networkclient):
         mpi_time = MPI.Wtime()
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
@@ -970,6 +992,21 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         self.tet3 = tet3
         self.tet4 = tet4
         self.tet5 = tet5
+        self.tet6 = tet6
+        self.tet7 = tet7
+        self.tet8 = tet8
+        self.tet9 = tet9
+        self.tet10 = tet10
+        self.lk_argmax1 = lk_argmax1
+        self.lk_argmax2 = lk_argmax2
+        self.lk_argmax3 = lk_argmax3
+        self.lk_argmax4 = lk_argmax4
+        self.lk_argmax5 = lk_argmax5
+        self.lk_argmax6 = lk_argmax6
+        self.lk_argmax7 = lk_argmax7
+        self.lk_argmax8 = lk_argmax8
+        self.lk_argmax9 = lk_argmax9
+        self.lk_argmax10 = lk_argmax10
 
         # bin timestamp for each decoder
         if self.dec_rank == self.config['rank']['decoder'][0]:
@@ -1125,6 +1162,36 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                             self.post_sum_sliding_window)] = self.tet4
             self.enc_cred_int_array[4,np.mod(self.decoder_1_count,
                             self.post_sum_sliding_window)] = self.tet5
+            self.enc_cred_int_array[5,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.tet6
+            self.enc_cred_int_array[6,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.tet7
+            self.enc_cred_int_array[7,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.tet8
+            self.enc_cred_int_array[8,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.tet9
+            self.enc_cred_int_array[9,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.tet10
+            self.lk_argmaxes[0,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax1
+            self.lk_argmaxes[1,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax2
+            self.lk_argmaxes[2,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax3
+            self.lk_argmaxes[3,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax4
+            self.lk_argmaxes[4,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax5
+            self.lk_argmaxes[5,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax6
+            self.lk_argmaxes[6,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax7
+            self.lk_argmaxes[7,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax8
+            self.lk_argmaxes[8,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax9
+            self.lk_argmaxes[9,np.mod(self.decoder_1_count,
+                            self.post_sum_sliding_window)] = self.lk_argmax10
             #print(self.enc_cred_int_array)
             #print(np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0])
 

@@ -33,9 +33,15 @@ class PosteriorSum(rt_logging.PrintableMessage):
 
     This message has helper serializer/deserializer functions to be used to speed transmission.
     """
-    _byte_format = 'IIdddddddddddiiiiiiiii'
+    _byte_format = 'IIdddddddddddiiiiiiiiiiiiiiiiiiiiiiii'
 
-    def __init__(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5):
+    def __init__(
+        self, bin_timestamp, spike_timestamp, target, offtarget, box,
+        arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count,
+        crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5,
+        tet6, tet7, tet8, tet9, tet10,
+        lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
+        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10):
         self.bin_timestamp = bin_timestamp
         self.spike_timestamp = spike_timestamp
         self.target = target
@@ -58,21 +64,50 @@ class PosteriorSum(rt_logging.PrintableMessage):
         self.tet3 = tet3
         self.tet4 = tet4
         self.tet5 = tet5
+        self.tet6 = tet6
+        self.tet7 = tet7
+        self.tet8 = tet8
+        self.tet9 = tet9
+        self.tet10 = tet10
+        self.lk_argmax1 = lk_argmax1
+        self.lk_argmax2 = lk_argmax2
+        self.lk_argmax3 = lk_argmax3
+        self.lk_argmax4 = lk_argmax4
+        self.lk_argmax5 = lk_argmax5
+        self.lk_argmax6 = lk_argmax6
+        self.lk_argmax7 = lk_argmax7
+        self.lk_argmax8 = lk_argmax8
+        self.lk_argmax9 = lk_argmax9
+        self.lk_argmax10 = lk_argmax10
+
 
     def pack(self):
-        return struct.pack(self._byte_format, self.bin_timestamp, self.spike_timestamp, self.target, self.offtarget,
-                        self.box, self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
-                           self.arm8, self.spike_count, self.crit_ind, self.posterior_max, self.rank,
-                           self.tet1,self.tet2,self.tet3,self.tet4,self.tet5)
+        return struct.pack(
+            self._byte_format, self.bin_timestamp, self.spike_timestamp, self.target, self.offtarget,
+            self.box, self.arm1, self.arm2, self.arm3, self.arm4, self.arm5, self.arm6, self.arm7,
+            self.arm8, self.spike_count, self.crit_ind, self.posterior_max, self.rank,
+            self.tet1,self.tet2,self.tet3,self.tet4,self.tet5,self.tet6, self.tet7, self.tet8, self.tet9,self.tet10,
+            self.lk_argmax1, self.lk_argmax2, self.lk_argmax3, self.lk_argmax4, self.lk_argmax5,
+            self.lk_argmax6, self.lk_argmax7, self.lk_argmax8, self.lk_argmax9, self.lk_argmax10)
 
     @classmethod
     def unpack(cls, message_bytes):
-        bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5 = struct.unpack(
+        (bin_timestamp, spike_timestamp, target, offtarget, box,
+        arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind,
+        posterior_max, rank,tet1,tet2,tet3,tet4,tet5,
+        tet6,tet7,tet8,tet9,tet10,
+        lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
+        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10, = struct.unpack(
             cls._byte_format, message_bytes)
         return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, offtarget=offtarget,
                 box=box, arm1=arm1, arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, 
                 spike_count=spike_count,crit_ind=crit_ind, posterior_max=posterior_max, rank=rank,
-                tet1=tet1,tet2=tet2,tet3=tet3,tet4=tet4,tet5=tet5)
+                tet1=tet1,tet2=tet2,tet3=tet3,tet4=tet4,tet5=tet5,
+                tet6=tet6,tet7=tet7,tet8=tet8,tet9=tet9,tet10=tet10,
+                lk_argmax1=lk_argmax1, lk_argmax2=lk_argmax2, lk_argmax3=lk_argmax3,
+                lk_argmax4=lk_argmax4, lk_argmax5=lk_argmax5, lk_argmax6=lk_argmax6,
+                lk_argmax7=lk_argmax7, lk_argmax8=lk_argmax8, lk_argmax9=lk_argmax9,
+                lk_argmax10=lk_argmax10)
 
 
 class VelocityPosition(rt_logging.PrintableMessage):
@@ -128,10 +163,18 @@ class DecoderMPISendInterface(realtime_base.RealtimeMPIClass):
             tag=realtime_base.MPIMessageTag.COMMAND_MESSAGE.value)
 
     # def sending posterior message to supervisor with POSTERIOR tag
-    def send_posterior_message(self, bin_timestamp, spike_timestamp, target, offtarget, box, arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max, rank, tet1,tet2,tet3,tet4,tet5):
+    def send_posterior_message(
+        self, bin_timestamp, spike_timestamp, target, offtarget, box,
+        arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count, crit_ind, posterior_max,
+        rank, tet1,tet2,tet3,tet4,tet5,tet6,tet7,tet8,tet9,tet10,
+        lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
+        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10):
         message = PosteriorSum(bin_timestamp, spike_timestamp, target, offtarget, box,
                                arm1, arm2, arm3, arm4, arm5, arm6, arm7, arm8, spike_count,
-                               crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5)
+                               crit_ind, posterior_max, rank,tet1,tet2,tet3,tet4,tet5,
+                               tet6,tet7,tet8,tet9,tet10,
+                               lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
+                               lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10)
         #print('stim_message: ',message)
 
         self.comm.Send(buf=message.pack(),
@@ -1570,7 +1613,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.posterior_sum_offtarget = 0
 
         self.spike_count = 0
-        self.enc_cred_int_array = [0,0,0,0,0]
+        self.enc_cred_int_array = [0] * 10
         self.spikes_in_bin = 0
         self.spike_timestamp = 0
 
@@ -1774,7 +1817,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 # run add observation
                 if posterior_spikes.shape[0] > 0:
                     self.spike_count = posterior_spikes.shape[0]
-                    self.enc_cred_int_array = [0,0,0,0,0]
+                    self.enc_cred_int_array = [0] * 10
+                    self.lk_argmax_array = [-1] * 10
                     self.spike_timestamp = 0
 
                     spikes_in_bin = 0
@@ -1788,7 +1832,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                         # this list is [0,0,0,0,0] and gets filled with each decoded spike
                         # then send all values to main and pick-out non-zero there
                         if posterior_spikes[i,2] <= self.config['ripple_conditioning']['enc_cred_int_max']:
-                            self.enc_cred_int_array[np.mod(spikes_in_bin,5)] = np.int(posterior_spikes[i,1])
+                            self.enc_cred_int_array[np.mod(spikes_in_bin,10)] = np.int(posterior_spikes[i,1])
+                            self.lk_argmax_array[np.mod(spikes_in_bin, 10)] = np.argmax(posterior_spikes[i, 3:-1])
                
                     #print(self.enc_cred_int_array)
 
@@ -1808,7 +1853,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                     #print('no spikes after remove duplicates')
 
                     self.spike_count = 0
-                    self.enc_cred_int_array = [0,0,0,0,0]
+                    self.enc_cred_int_array = [0] * 10
+                    self.lk_argmax_array = [-1] * 10
                     self.spike_timestamp = 0
 
                     # run increment no spike
@@ -1817,7 +1863,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # no spikes in time bin of interest
             else:
                 self.spike_count = 0
-                self.enc_cred_int_array = [0,0,0,0,0]
+                    self.enc_cred_int_array = [0] * 10
+                    self.lk_argmax_array = [-1] * 10
                 self.spike_timestamp = 0
 
                 # run increment no spike
@@ -1835,7 +1882,14 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                  self.spike_count, self.crit_ind, self.posterior_max, self.rank,
                                                  self.enc_cred_int_array[0], self.enc_cred_int_array[1],
                                                  self.enc_cred_int_array[2], self.enc_cred_int_array[3],
-                                                 self.enc_cred_int_array[4])
+                                                 self.enc_cred_int_array[4], self.enc_cred_int_array[5],
+                                                 self.enc_cred_int_array[6], self.enc_cred_int_array[7],
+                                                 self.enc_cred_int_array[8], self.enc_cred_int_array[9],
+                                                 self.lk_argmax_array[0], self.lk_argmax_array[1],
+                                                 self.lk_argmax_array[2], self.lk_argmax_array[3],
+                                                 self.lk_argmax_array[4], self.lk_argmax_array[5],
+                                                 self.lk_argmax_array[6], self.lk_argmax_array[7],
+                                                 self.lk_argmax_array[8], self.lk_argmax_array[9])
 
             # save to records
             self.write_record(realtime_base.RecordIDs.LIKELIHOOD_OUTPUT,
