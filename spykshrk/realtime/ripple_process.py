@@ -658,6 +658,8 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
 
         self.last_timestamp = -1
 
+        self.ts_marker = -1
+
         # self.mpi_send.send_record_register_messages(self.get_record_register_messages())
 
     def set_num_trodes(self, message: realtime_base.NumTrodesMessage):
@@ -676,6 +678,26 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
     def turn_on_datastreams(self):
         self.class_log.info("Turn on datastreams.")
         self.data_interface.start_all_streams()
+
+        # only need one ripple process to synchronize
+        if self.rank == self.config['rank']['ripple'][0]:
+            local_comm = self.comm.Split(0)
+            local_rank = local_comm.Get_rank()
+            if local_rank != 0:
+                raise ValueError(
+                    "Ripple process local rank is not 0")
+            
+            while True:
+                msgs = self.data_interface.__next__()
+                if msgs is not None:
+                    self.ts_marker = msgs[0].timestamp
+                    break
+            
+            # send this value to encoders and decoders. blocks until all
+            # processes have received it
+            self.class_log(
+                f"Ripple process LFP timestamp marker: {self.ts_marker}")
+            data = local_comm.bcast(self.ts_marker, root=0)
 
     def update_ripple_parameter(self, parameter: RippleParameterMessage):
         self.class_log.info("Ripple parameter updated.")

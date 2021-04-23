@@ -1585,6 +1585,18 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.overall_lat = np.zeros(1000000)
         self.overall_lat_ind = 0
 
+        self.ts_marker = -1
+
+        fs, fs_lfp = utils.get_sampling_rates(self.config)
+        ds, rem = divmod(fs, fs_lfp)
+        if rem != 0:
+            raise ValueError(f"LFP downsampling ratio is not an integer")
+        
+        samples_per_bin, rem = divmod(self.config['pp_decoder']['bin_size'], ds)
+        if rem != 0:
+            raise ValueError(f"Number of LFP samples per time bin is not an integer")
+        self.num_lfp_samples_per_bin = int(samples_per_bin)
+
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
         self.pos_interface.register_datatype_channel(-1)
@@ -1597,6 +1609,16 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
     def turn_on_datastreams(self):
         self.pos_interface.start_all_streams()
+
+        local_comm = self.comm.Split(0)
+        local_rank = local_comm.Get_rank()
+        if local_rank == 0:
+            raise ValueError(
+                "Local rank is 0 but that should be reserved for ripple process")
+        data = None
+        data = local_comm.bcast(data, root=0)
+        self.class_log.info(f"LFP timestamp marker: {data}")
+        self.ts_marker = data
 
     def select_ntrodes(self, ntrode_list):
         #self.ntrode_list = ntrode_list

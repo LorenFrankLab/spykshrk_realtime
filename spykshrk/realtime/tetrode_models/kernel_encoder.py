@@ -87,6 +87,7 @@ class RSTKernelEncoder:
         self.covariate = 0
         # initialize to one's to prevent divide by zero when normalizing by occupancy
         self.pos_hist = np.ones(param.pos_hist_struct.num_bins)
+        self.firing_rate = np.ones_like(self.pos_hist)
 
         pos_bin_center_tmp = self.param.pos_hist_struct.pos_bin_center
         #currently not using pos_kernel because i turned off the convolution step below
@@ -109,6 +110,8 @@ class RSTKernelEncoder:
 
         self.max_pos = self.arm_coords[-1][-1] + 1
         self.pos_bins = np.arange(0,self.max_pos,1)
+
+        self.bin_idx = -1
 
         #print('num bins: ',param.pos_hist_struct.num_bins)
         #print('range: ',param.pos_hist_struct.pos_range)
@@ -153,11 +156,11 @@ class RSTKernelEncoder:
         self.current_vel = current_vel
         self.taskState = taskState
         # bin_idx = np.nonzero((self.param.pos_hist_struct.pos_bin_edges - covariate) > 0)[0][0] - 1
-        bin_idx = self.param.pos_hist_struct.which_bin(self.covariate)
+        self.bin_idx = self.param.pos_hist_struct.which_bin(self.covariate)
         #only want to add to pos_hist during movement times - aka vel > 8
         if (abs(self.current_vel) >= self.config['encoder']['vel'] and self.taskState == 1
             and not self.load_encoding):
-            self.pos_hist[bin_idx] += 1
+            self.pos_hist[self.bin_idx] += 1
             #print('occupancy before',self.pos_hist)
             #print('update_covariate current_vel: ',self.current_vel)
             # put NaNs into arm gaps
@@ -168,7 +171,12 @@ class RSTKernelEncoder:
 
         if self.occupancy_counter % 10000 == 0:
             #print('encoder_query_occupancy: ',self.pos_hist)
-            print('number of position entries encoder: ',self.occupancy_counter)      
+            print('number of position entries encoder: ',self.occupancy_counter)
+        
+    # remember to change this eventually to use encoding spikes, not decoding
+    # only for testing at the moment to minimize changes
+    def add_spike_to_decode(self):
+        self.firing_rate[self.bin_idx] += 1
 
     def new_mark(self, mark, new_cov=None):
         ## update new covariate if specified, otherwise use previous covariate state

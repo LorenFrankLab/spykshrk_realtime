@@ -1487,7 +1487,9 @@ class MainSimulatorManager(rt_logging.LoggingClass):
         self.stim_decider.start_record_writing()
 
     def _turn_on_datastreams(self):
-        # Then turn on data streaming to ripple ranks
+        # Ripple ranks should be activated first since they determine
+        # the first LFP timestamp. This synchronizes the encoder and
+        # decoder
         for rank in self.config['rank']['ripples']:
             self.send_interface.send_turn_on_datastreams(rank)
 

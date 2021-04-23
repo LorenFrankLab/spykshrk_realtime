@@ -6,7 +6,9 @@ import time
 from time import time_ns
 from mpi4py import MPI
 from threading import Thread, Timer, Event
-from spykshrk.realtime import realtime_base, realtime_logging, binary_record, datatypes, main_process
+from spykshrk.realtime import (
+    realtime_base, realtime_logging, binary_record, datatypes,
+    main_process, utils)
 from spykshrk.realtime.simulator import simulator_process
 
 from spykshrk.realtime.datatypes import SpikePoint, LinearPosPoint, CameraModulePoint
@@ -218,7 +220,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
     def __init__(self, rank, config, local_rec_manager, send_interface: EncoderMPISendInterface,
                  spike_interface: realtime_base.DataSourceReceiver,
-                 pos_interface: realtime_base.DataSourceReceiver):
+                 pos_interface: realtime_base.DataSourceReceiver,
+                 lfp_interface: realtime_base.DataSourceReceiver):
 
         super(RStarEncoderManager, self).__init__(rank=rank,
                                                   local_rec_manager=local_rec_manager,
@@ -245,6 +248,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.mpi_send = send_interface
         self.spike_interface = spike_interface
         self.pos_interface = pos_interface
+        self.lfp_interface = lfp_interface
 
         #initialize velocity calc and linear position assignment functions
         self.velCalc = VelocityCalculator(self.config)
@@ -292,6 +296,18 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.encoder_lat = np.zeros(200000)
         self.encoder_lat_ind = 0
 
+        fs, fs_lfp = utils.get_sampling_rates(self.config)
+        ds, rem = divmod(fs, fs_lfp)
+        if rem != 0:
+            raise ValueError(f"LFP downsampling ratio is not an integer")
+        
+        samples_per_bin, rem = divmod(self.config['pp_decoder']['bin_size'], ds)
+        if rem != 0:
+            raise ValueError(f"Number of LFP samples per time bin is not an integer")
+        self.num_lfp_samples_per_bin = int(samples_per_bin)
+
+        self.time_bin_delay = self.config['pp_decoder']['bin_delay']
+
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
         # to turn on, uncomment the line, self.thread.start()
@@ -301,9 +317,12 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         #self.thread.start()
 
 
-    def register_pos_datatype(self):
+    def register_datatypes(self):
         # Register position, right now only one position channel is supported
         self.pos_interface.register_datatype_channel(-1)
+        # just use tetrode 1. We really only care about timestamps, not the
+        # actual data
+        self.lfp_interface.register_datatype_channel(1)
 
     def set_num_trodes(self, message: realtime_base.NumTrodesMessage):
         self.num_ntrodes = message.num_ntrodes
@@ -324,6 +343,17 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.class_log.info("Turn on datastreams.")
         self.spike_interface.start_all_streams()
         self.pos_interface.start_all_streams()
+
+        local_comm = self.comm.Split(0)
+        local_rank = local_comm.Get_rank()
+        if local_rank == 0:
+            raise ValueError(
+                "Local rank is 0 but that should be reserved for ripple process")
+        data = None
+        data = local_comm.bcast(data, root=0)
+        self.class_log.info(f"LFP timestamp marker: {data}")
+        self.ts_marker = data
+        
 
     def process_next_data(self):
 
@@ -602,6 +632,10 @@ class EncoderProcess(realtime_base.RealtimeProcess):
                                                                       rank=self.rank,
                                                                       config=self.config,
                                                                       datatype=datatypes.Datatypes.LINEAR_POSITION)
+            lfp_interface = simulator_process.SimulatorRemoteReceiver(comm=self.comm,
+                                                                      rank=self.rank,
+                                                                      config=self.config,
+                                                                      datatype=datatypes.Datatypes.LFP)
         elif self.config['datasource'] == 'trodes':
             print('about to configure network for decoding tetrode: ',self.rank)
             #time.sleep(10+2*self.rank)
@@ -615,8 +649,12 @@ class EncoderProcess(realtime_base.RealtimeProcess):
             #                                                           config=self.config,
             #                                                           datatype=datatypes.Datatypes.LINEAR_POSITION)
 
-            spike_interface = TrodesNetworkDataReceiver(comm, rank, config, datatypes.Datatypes.SPIKES)
-            pos_interface = TrodesNetworkDataReceiver(comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+            spike_interface = TrodesNetworkDataReceiver(
+                comm, rank, config, datatypes.Datatypes.SPIKES)
+            pos_interface = TrodesNetworkDataReceiver(
+                comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+            lfp_interface = TrodesNetworkDataReceiver(
+                comm, rank, config, datatypes.Datatypes.LFP)
 
             print('finished trodes setup for tetrode: ',self.rank)
         self.enc_man = RStarEncoderManager(rank=rank,
@@ -638,8 +676,9 @@ class EncoderProcess(realtime_base.RealtimeProcess):
 
         self.enc_man.setup_mpi()
 
-        # First thing register pos datatype
-        self.enc_man.register_pos_datatype()
+        # Spike channels registration is triggered by message from main process.
+        # We also need to register the position and LFP
+        self.enc_man.register_datatypes()
 
         try:
             while True:
