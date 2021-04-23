@@ -515,7 +515,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                     #if abs(self.current_vel) >= self.config['encoder']['vel'] and max(amp_marks)>self.config['encoder']['spk_amp']+50:
                     if (abs(self.current_vel) >= self.velocity_threshold and self.taskState == 1
                         and not self.config['ripple_conditioning']['load_encoding']):
-                        if self.spk_counter % 1000 == 0:
+                        if self.spk_counter % 2000 == 0:
                             print('added',self.spk_counter,'spikes to tree in tet',datapoint.elec_grp_id)
                             #print('number of noise events detected:',self.count_noise_events)
 
