@@ -97,7 +97,7 @@ class PosteriorSum(rt_logging.PrintableMessage):
         posterior_max, rank,tet1,tet2,tet3,tet4,tet5,
         tet6,tet7,tet8,tet9,tet10,
         lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
-        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10, = struct.unpack(
+        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10) = struct.unpack(
             cls._byte_format, message_bytes)
         return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, offtarget=offtarget,
                 box=box, arm1=arm1, arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, 
@@ -1882,8 +1882,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # no spikes in time bin of interest
             else:
                 self.spike_count = 0
-                    self.enc_cred_int_array = [0] * 10
-                    self.lk_argmax_array = [-1] * 10
+                self.enc_cred_int_array = [0] * 10
+                self.lk_argmax_array = [-1] * 10
                 self.spike_timestamp = 0
 
                 # run increment no spike
