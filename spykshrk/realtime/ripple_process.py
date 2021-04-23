@@ -8,6 +8,7 @@ import time
 import fcntl
 import os
 import numpy as np
+import spykshrk.realtime.utils as utils
 import spykshrk.realtime.binary_record as binary_record
 import spykshrk.realtime.datatypes as datatypes
 import spykshrk.realtime.realtime_base as realtime_base
@@ -620,7 +621,7 @@ class RippleFilter(rt_logging.LoggingClass):
 
 
 class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.LoggingClass):
-    def __init__(self, comm, rank, local_rec_manager, send_interface: RippleMPISendInterface,
+    def __init__(self, rank, local_rec_manager, send_interface: RippleMPISendInterface,
                  data_interface: realtime_base.DataSourceReceiver, config):
         super().__init__(rank=rank,
                          local_rec_manager=local_rec_manager,
@@ -640,7 +641,6 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                          rec_formats=['Iidd??ddddd'],
                          config = config)
 
-        self.comm = comm
         self.rank = rank
         self.mpi_send = send_interface
         self.data_interface = data_interface
@@ -660,6 +660,17 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
         self.last_timestamp = -1
 
         self.ts_marker = -1
+
+        fs, fs_lfp = utils.get_sampling_rates(self.config)
+        ds, rem = divmod(fs, fs_lfp)
+        if rem != 0:
+            raise ValueError(f"LFP downsampling ratio is not an integer")
+
+        samples_per_bin, rem = divmod(self.config['pp_decoder']['bin_size'], ds)
+        if rem != 0:
+            raise ValueError(f"Number of LFP samples per time bin is not an integer")
+
+        self.time_bin_size = self.config['pp_decoder']['bin_size']
 
         # self.mpi_send.send_record_register_messages(self.get_record_register_messages())
 
@@ -690,12 +701,12 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
 
             self.class_log.info(f"Sending timestamp {self.ts_marker}")
             for rank in self.config['rank']['encoders']:
-                self.comm.send(
+                self.mpi_send.comm.send(
                     self.ts_marker,
                     dest=rank,
                     tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
             for rank in self.config['rank']['decoder']:
-                self.comm.send(
+                self.mpi_send.comm.send(
                     self.ts_marker,
                     dest=rank,
                     tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
@@ -795,7 +806,15 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                                                        thresh_state=filter_state,
                                                        conditioning_thresh_state=conditioning_filter_state)
                 #also send thresh cross to decoder - only for rank == 2 aka first ripple_node
-                if self.rank == self.config['rank']['ripples'][0] and self.lfp_counter % (self.time_bin_size/20) == 0:
+                # if self.rank == self.config['rank']['ripples'][0] and self.lfp_counter % 9 == 0:
+                #     print(f"{self.rank} Sending lfp timestamp {datapoint.timestamp} to decoder")
+                #     self.mpi_send.send_ripple_thresh_state_decoder(timestamp=datapoint.timestamp,
+                #                         elec_grp_id=datapoint.elec_grp_id,
+                #                         thresh_state=filter_state,
+                #                         conditioning_thresh_state=conditioning_filter_state)
+                if ((self.rank == self.config['rank']['ripples'][0]) and
+                    (datapoint.timestamp > self.ts_marker) and
+                    ((datapoint.timestamp - self.ts_marker) % self.time_bin_size == 0)):
                     self.mpi_send.send_ripple_thresh_state_decoder(timestamp=datapoint.timestamp,
                                                            elec_grp_id=datapoint.elec_grp_id,
                                                            thresh_state=filter_state,
@@ -843,8 +862,7 @@ class RippleProcess(realtime_base.RealtimeProcess):
         else:
             raise realtime_base.DataSourceError("No valid data source selected")
 
-        self.rip_man = RippleManager(comm=comm,
-                                    rank=rank,
+        self.rip_man = RippleManager(rank=rank,
                                     local_rec_manager=self.local_rec_manager,
                                     send_interface=self.mpi_send,
                                     data_interface=data_interface,

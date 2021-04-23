@@ -1502,7 +1502,7 @@ class ClusterlessClassifier(ClusterlessEstimator):
 
 
 class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
-    def __init__(self, comm, rank, config, local_rec_manager, send_interface: DecoderMPISendInterface,
+    def __init__(self, rank, config, local_rec_manager, send_interface: DecoderMPISendInterface,
                  spike_decode_interface: SpikeDecodeRecvInterface, pos_interface: realtime_base.DataSourceReceiver,
                  lfp_interface: LFPTimekeeperRecvInterface, gui_send_interface: DecoderGuiSendInterface):
         if config['clusterless_estimator'] == 'pp_decoder':
@@ -1547,7 +1547,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         # with velocity
         # NOTE: q is symbol for integer, d is symbol for decimal
 
-        self.comm = comm
         self.rank = rank
         self.config = config
         self.mpi_send = send_interface
@@ -1639,7 +1638,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         samples_per_bin, rem = divmod(self.config['pp_decoder']['bin_size'], ds)
         if rem != 0:
             raise ValueError(f"Number of LFP samples per time bin is not an integer")
-        self.num_lfp_samples_per_bin = int(samples_per_bin)
 
     def register_pos_interface(self):
         # Register position, right now only one position channel is supported
@@ -1655,10 +1653,12 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
         self.pos_interface.start_all_streams()
 
         # block until receive first LFP timestamp
-        self.ts_marker = self.comm.recv(
+        # a little hacky, since this class doesn't have a comm
+        # class member, we use mpi_send's comm (MPI.COMM_WORLD)
+        # to recieve the timestamp
+        self.ts_marker = self.mpi_send.comm.recv(
             source=self.config['rank']['ripples'][0],
             tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
-        self.class_log.info(f"Got timestamp {self.ts_marker}")
 
     def select_ntrodes(self, ntrode_list):
         #self.ntrode_list = ntrode_list
@@ -2180,7 +2180,7 @@ class DecoderProcess(realtime_base.RealtimeProcess):
                                                  send_interface=self.mpi_send,
                                                  spike_decode_interface=self.spike_decode_interface)
         elif config['decoder'] == 'pp_decoder':
-            self.dec_man = PPDecodeManager(comm=comm, rank=rank, config=config,
+            self.dec_man = PPDecodeManager(rank=rank, config=config,
                                            local_rec_manager=self.local_rec_manager,
                                            send_interface=self.mpi_send,
                                            spike_decode_interface=self.spike_decode_interface,

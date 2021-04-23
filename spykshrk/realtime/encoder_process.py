@@ -218,7 +218,7 @@ class EncoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
 ##########################################################################
 class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
-    def __init__(self, comm, rank, config, local_rec_manager, send_interface: EncoderMPISendInterface,
+    def __init__(self, rank, config, local_rec_manager, send_interface: EncoderMPISendInterface,
                  spike_interface: realtime_base.DataSourceReceiver,
                  pos_interface: realtime_base.DataSourceReceiver,
                  lfp_interface: realtime_base.DataSourceReceiver):
@@ -243,7 +243,6 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                                   rec_formats=['qidd',
                                                                'qiddddddqqq'+'d'*config['encoder']['position']['bins']])
 
-        self.comm = comm
         self.rank = rank
         self.config = config
         self.mpi_send = send_interface
@@ -302,12 +301,16 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         if rem != 0:
             raise ValueError(f"LFP downsampling ratio is not an integer")
         
+        # if the bin_size (in samples, using the global sampling rate) divided by
+        # the LFP downsampling factor is not an integer, we will never trigger
+        # a likelihood computation. Make sure that doesn't happen
         samples_per_bin, rem = divmod(self.config['pp_decoder']['bin_size'], ds)
         if rem != 0:
             raise ValueError(f"Number of LFP samples per time bin is not an integer")
-        self.num_lfp_samples_per_bin = int(samples_per_bin)
 
         self.time_bin_delay = self.config['pp_decoder']['bin_delay']
+        self.time_bin_size = self.config['pp_decoder']['bin_size']
+        self.lfp_timestamp = -1
 
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
@@ -344,16 +347,27 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.class_log.info("Turn on datastreams encoder process.")
         self.spike_interface.start_all_streams()
         self.pos_interface.start_all_streams()
+        self.lfp_interface.start_all_streams()
 
         # block until receive first LFP timestamp
-        self.ts_marker = self.comm.recv(
+        # a little hacky, since this class doesn't have a comm
+        # class member, we use mpi_send's comm (MPI.COMM_WORLD)
+        # to recieve the timestamp
+        self.ts_marker = self.mpi_send.comm.recv(
             source=self.config['rank']['ripples'][0],
             tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
-        
 
     def process_next_data(self):
 
         time = MPI.Wtime()
+
+        msgs = self.lfp_interface.__next__()
+        if msgs is not None:
+            self.lfp_timestamp = msgs[0].timestamp
+            if ((self.lfp_timestamp > self.ts_marker) and
+                (self.lfp_timestamp - self.ts_marker) % self.time_bin_size == 0):
+                # search for spikes within appropriate window
+                pass
 
         msgs = self.spike_interface.__next__()
         t0 = time_ns()
@@ -653,8 +667,7 @@ class EncoderProcess(realtime_base.RealtimeProcess):
                 comm, rank, config, datatypes.Datatypes.LFP)
 
             print('finished trodes setup for tetrode: ',self.rank)
-        self.enc_man = RStarEncoderManager(comm=comm,
-                                           rank=rank,
+        self.enc_man = RStarEncoderManager(rank=rank,
                                            config=config,
                                            local_rec_manager=self.local_rec_manager,
                                            send_interface=self.mpi_send,
