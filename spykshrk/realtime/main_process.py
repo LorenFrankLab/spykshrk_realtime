@@ -300,7 +300,7 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
         # NOTE: if you dont know how large the buffer should be, set it to a large number
         # then you will get an error saying what it should be set to
         # bytearray was 80 before adding spike_count, 92 before adding rank
-        self.msg_buffer = bytearray(132)
+        self.msg_buffer = bytearray(192)
         self.req = self.comm.Irecv(
             buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
 
