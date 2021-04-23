@@ -218,7 +218,7 @@ class EncoderGuiRecvInterface(realtime_base.RealtimeMPIClass):
 ##########################################################################
 class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
-    def __init__(self, rank, config, local_rec_manager, send_interface: EncoderMPISendInterface,
+    def __init__(self, comm, rank, config, local_rec_manager, send_interface: EncoderMPISendInterface,
                  spike_interface: realtime_base.DataSourceReceiver,
                  pos_interface: realtime_base.DataSourceReceiver,
                  lfp_interface: realtime_base.DataSourceReceiver):
@@ -243,6 +243,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                                   rec_formats=['qidd',
                                                                'qiddddddqqq'+'d'*config['encoder']['position']['bins']])
 
+        self.comm = comm
         self.rank = rank
         self.config = config
         self.mpi_send = send_interface
@@ -340,19 +341,14 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                                                              True, self.rst_param,self.config))
 
     def turn_on_datastreams(self):
-        self.class_log.info("Turn on datastreams.")
+        self.class_log.info("Turn on datastreams encoder process.")
         self.spike_interface.start_all_streams()
         self.pos_interface.start_all_streams()
 
-        local_comm = self.comm.Split(0)
-        local_rank = local_comm.Get_rank()
-        if local_rank == 0:
-            raise ValueError(
-                "Local rank is 0 but that should be reserved for ripple process")
-        data = None
-        data = local_comm.bcast(data, root=0)
-        self.class_log.info(f"LFP timestamp marker: {data}")
-        self.ts_marker = data
+        # block until receive first LFP timestamp
+        self.ts_marker = self.comm.recv(
+            source=self.config['rank']['ripples'][0],
+            tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
         
 
     def process_next_data(self):
@@ -657,12 +653,14 @@ class EncoderProcess(realtime_base.RealtimeProcess):
                 comm, rank, config, datatypes.Datatypes.LFP)
 
             print('finished trodes setup for tetrode: ',self.rank)
-        self.enc_man = RStarEncoderManager(rank=rank,
+        self.enc_man = RStarEncoderManager(comm=comm,
+                                           rank=rank,
                                            config=config,
                                            local_rec_manager=self.local_rec_manager,
                                            send_interface=self.mpi_send,
                                            spike_interface=spike_interface,
-                                           pos_interface=pos_interface)
+                                           pos_interface=pos_interface,
+                                           lfp_interface=lfp_interface)
 
         self.mpi_recv = EncoderMPIRecvInterface(comm=comm, rank=rank, config=config, encoder_manager=self.enc_man)
 

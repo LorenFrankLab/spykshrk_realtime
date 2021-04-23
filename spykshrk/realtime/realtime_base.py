@@ -30,6 +30,8 @@ class MPIMessageTag(IntEnum):
 
     DATA_FOR_GUI = 30
 
+    FIRST_LFP_TIMESTAMP = 40
+
 
 class RecordIDs(IntEnum):
     RIPPLE_STATE = 1

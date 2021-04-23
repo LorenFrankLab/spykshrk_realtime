@@ -620,7 +620,7 @@ class RippleFilter(rt_logging.LoggingClass):
 
 
 class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.LoggingClass):
-    def __init__(self, rank, local_rec_manager, send_interface: RippleMPISendInterface,
+    def __init__(self, comm, rank, local_rec_manager, send_interface: RippleMPISendInterface,
                  data_interface: realtime_base.DataSourceReceiver, config):
         super().__init__(rank=rank,
                          local_rec_manager=local_rec_manager,
@@ -640,6 +640,7 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                          rec_formats=['Iidd??ddddd'],
                          config = config)
 
+        self.comm = comm
         self.rank = rank
         self.mpi_send = send_interface
         self.data_interface = data_interface
@@ -680,24 +681,26 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
         self.data_interface.start_all_streams()
 
         # only need one ripple process to synchronize
-        if self.rank == self.config['rank']['ripple'][0]:
-            local_comm = self.comm.Split(0)
-            local_rank = local_comm.Get_rank()
-            if local_rank != 0:
-                raise ValueError(
-                    "Ripple process local rank is not 0")
-            
+        if self.rank == self.config['rank']['ripples'][0]:
             while True:
                 msgs = self.data_interface.__next__()
                 if msgs is not None:
                     self.ts_marker = msgs[0].timestamp
                     break
-            
-            # send this value to encoders and decoders. blocks until all
-            # processes have received it
-            self.class_log(
-                f"Ripple process LFP timestamp marker: {self.ts_marker}")
-            data = local_comm.bcast(self.ts_marker, root=0)
+
+            self.class_log.info(f"Sending timestamp {self.ts_marker}")
+            for rank in self.config['rank']['encoders']:
+                self.comm.send(
+                    self.ts_marker,
+                    dest=rank,
+                    tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
+            for rank in self.config['rank']['decoder']:
+                self.comm.send(
+                    self.ts_marker,
+                    dest=rank,
+                    tag=realtime_base.MPIMessageTag.FIRST_LFP_TIMESTAMP)
+
+            self.class_log.info("Sent first lfp timestamp")
 
     def update_ripple_parameter(self, parameter: RippleParameterMessage):
         self.class_log.info("Ripple parameter updated.")
@@ -840,7 +843,8 @@ class RippleProcess(realtime_base.RealtimeProcess):
         else:
             raise realtime_base.DataSourceError("No valid data source selected")
 
-        self.rip_man = RippleManager(rank=rank,
+        self.rip_man = RippleManager(comm=comm,
+                                    rank=rank,
                                     local_rec_manager=self.local_rec_manager,
                                     send_interface=self.mpi_send,
                                     data_interface=data_interface,

@@ -773,8 +773,12 @@ class DecodingResultsWindow(QMainWindow):
             self.posterior_datas[ii] = np.zeros((B, N))
             self.state_datas[ii] = np.zeros((self.n_states, N))
 
-        colors = ['#4c72b0','#dd8452', '#55a868'] 
-        labels = self.config['pp_classifier']['state_labels']
+        if self.config['clusterless_estimator'] == 'pp_decoder':
+            colors = ['#4c72b0']
+            labels = self.config['pp_decoder']['state_labels']
+        elif self.config['clusterless_estimator'] == 'pp_classifier':
+            colors = ['#4c72b0','#dd8452', '#55a868'] 
+            labels = self.config['pp_classifier']['state_labels']
         # plot decoder lines
         for ii in range(num_plots):
             # top row - marginalized posterior

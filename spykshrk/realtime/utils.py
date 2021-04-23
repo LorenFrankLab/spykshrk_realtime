@@ -42,12 +42,12 @@ def get_sampling_rates(config):
     fs = hardware_config.attrib["samplingRate"]
 
     # lfp sampling rate might be defined in various places
-    try_network_config = false
+    try_network_config = False
     global_config = root.find("GlobalConfiguration")
     try:
         fs_lfp = global_config.attrib["lfpRate"]
     except KeyError:
-        try_network_config = true
+        try_network_config = True
 
     if try_network_config:
         network_config = root.find("NetworkConfiguration")
@@ -59,7 +59,7 @@ def get_sampling_rates(config):
 
     # if the lfp rate isn't found anywhere, it'll be the default
     # global sampling rate is always defined though
-    return fs, fs_lfp
+    return float(fs), float(fs_lfp)
 
 
 def normalize_to_probability(distribution):
