@@ -273,6 +273,12 @@ class SpikeDecodeRecvInterface(realtime_base.RealtimeMPIClass):
         self.req = self.comm.Irecv(
             buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA)
 
+##########################################################################
+        # self.req = self.comm.irecv(
+        #     tag=realtime_base.MPIMessageTag.SPIKE_DECODE_DATA
+        # )
+##########################################################################
+
     def __next__(self):
         rdy = self.req.Test()
         if rdy:
@@ -287,6 +293,14 @@ class SpikeDecodeRecvInterface(realtime_base.RealtimeMPIClass):
 
         else:
             return None
+
+##########################################################################
+        # rdy, msg = self.req.test()
+        # if rdy:
+        #     return msg
+        # else:
+        #     return None
+##########################################################################
 
 
 # make receiver to take in threshold message from ripple node - use same setup as in main_process
@@ -1697,7 +1711,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
 
     def process_next_data(self):
         spike_dec_msg = self.spike_dec_interface.__next__()
-        lfp_timekeeper = self.lfp_interface.__next__()
         time = MPI.Wtime()
 
         if spike_dec_msg is not None:
@@ -1754,6 +1767,50 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             #    print('in decoder, spike credible interval',spike_dec_msg.cred_int)
 
 
+##########################################################################
+            # t_retrieve = time_ns()
+            # if self.retrieve_lat_ind == self.retrieve_lat.shape[0]:
+            #     self.retrieve_lat = np.hstack((
+            #         self.retrieve_lat,
+            #         np.zeros(self.retrieve_lat.shape[0])
+            #     ))
+            # self.retrieve_lat[self.retrieve_lat_ind] = t_retrieve - spike_dec_msg.send_time
+            # self.retrieve_lat_ind += 1
+
+            # n_spikes = spike_dec_msg.data.shape[0]
+
+            # if self.overall_lat_ind + n_spikes > self.overall_lat.shape[0] - 1:
+            #     self.overall_lat = np.hstack((
+            #         self.overall_lat[:self.overall_lat_ind],
+            #         np.zeros(self.overall_lat.shape[0])
+            #     ))
+            # self.overall_lat[self.overall_lat_ind:self.overall_lat_ind + n_spikes] = (
+            #     self.ub - spike_dec_msg.data[:, 0])
+            # self.overall_lat_ind += n_spikes
+
+
+            # self.decoded_spike_counter += n_spikes
+            # if self.buff_ind + n_spikes > self.spike_buffer_size:
+            #     self.dropped_spikes += (
+            #         self.spike_buffer_size -
+            #         np.sum(self.decoded_spike_array[:self.buff_ind,-1], dtype=int))
+            #     print(
+            #         f"Decoder rank {self.rank} dropped spikes: "
+            #         f"{self.dropped_spikes/self.decoded_spike_counter*100:0.3f}% "
+            #         f"({self.dropped_spikes}/{self.decoded_spike_counter})")
+            #     self.buff_ind = 0
+
+            # self.decoded_spike_array[self.buff_ind:self.buff_ind + n_spikes] = spike_dec_msg.data
+            # self.buff_ind += n_spikes
+
+            # self.msg_counter += 1
+            # if self.msg_counter % 1000 == 0:
+            #     self.class_log.debug(
+            #         'Received {} decoded messages.'.format(self.msg_counter))
+##########################################################################
+
+
+        lfp_timekeeper = self.lfp_interface.__next__()
         # this counts every time an lfp timestamp comes in and is used to trigger computation of
         # the posterior every x ms
         if lfp_timekeeper is not None:
@@ -1761,6 +1818,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             self.decoder_timestamp = lfp_timekeeper.timestamp
             #print(lfp_timekeeper.timestamp)
 
+            # upper bound for the next time bin. used in latency calculations
             self.ub = self.decoder_timestamp - (self.decoder_bin_delay-2)*self.time_bin_size
 
             if self.lfp_timekeeper_counter % 1000 == 0:
@@ -1853,7 +1911,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                         if posterior_spikes[i,2] <= self.config['ripple_conditioning']['enc_cred_int_max']:
                             self.enc_cred_int_array[np.mod(spikes_in_bin,10)] = np.int(posterior_spikes[i,1])
                             self.lk_argmax_array[np.mod(spikes_in_bin, 10)] = np.argmax(posterior_spikes[i, 3:-1])
-               
+
                     #print(self.enc_cred_int_array)
 
                     # run increment bin: to calculate like and posterior
