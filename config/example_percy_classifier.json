@@ -60,7 +60,8 @@
         "enc_cred_int_max": 5,
         "min_unique_tets": 1,
         "ripple_lockout": 3000,
-        "load_encoding": false
+        "load_encoding": false,
+	"target_arm_position": [0, 40]
     },
 
     "reward_mode" : "conditioning_ripples",

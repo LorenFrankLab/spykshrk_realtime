@@ -341,6 +341,9 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.decoded_spike_array = np.zeros(
             (self.spike_buffer_size,
              self.config['encoder']['position']['bins']+4))
+        self.buff_ind = 0
+        self.dropped_spikes = 0
+        self.first_decoding_spike = True
 
         #start spike sent timer
         # NOTE: currently this is turned off because it increased the dropped spikes rather than decreased them
@@ -559,7 +562,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                         #print('spike_sent value from manager:',self.spike_sent)
 
                         # update the circular buffer
-                        self.add_spike_to_decode(datapoint, query_result, crit_ind)
+                        self.add_spike_to_decode(datapoint, query_result, self.crit_ind)
 
                     else:
                         # in the future, do we want to write a record if received spike but didn't decode?
@@ -651,13 +654,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
 
     def add_spike_to_decode(self, datapoint, query_result, cred_int):
 
-        if self.spk_counter > 0 and self.buff_ind == 0:
+        if self.spk_counter > 1 and self.buff_ind == 0:
             # count number of 0's in last column, add this to dropped spike count
             self.dropped_spikes += (
                 self.spike_buffer_size -
                 np.sum(self.decoded_spike_array[:,-1], dtype=int))
             print(
-                f"Rank {self.rank} dropped spikes: {self.dropped_spikes/self.spk_counter*100} % "
+                    f"Rank {self.rank} dropped spikes: {self.dropped_spikes/self.spk_counter*100:0.2f}% "
                 f"({self.dropped_spikes}/{self.spk_counter})")
 
 
