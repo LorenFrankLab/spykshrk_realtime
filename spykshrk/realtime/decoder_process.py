@@ -2026,8 +2026,6 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                         self.taskState = int(f.readline().decode()[0:1])
                       #print('taskState in decoder',self.taskState)
 
-                pass
-
     def process_gui_request_message(self, message):
         if isinstance(message, GuiDecoderParameterMessage):
             self.clusterless_estimator.update_velocity_threshold(message.encoding_velocity_threshold)
