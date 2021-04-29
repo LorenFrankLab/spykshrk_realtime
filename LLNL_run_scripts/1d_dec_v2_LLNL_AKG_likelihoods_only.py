@@ -240,7 +240,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
 
     #cell 15.1
     # just save likelihoods to netcdf
-    likelihoods_file_name = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_likelihoods_v2.nc')
+    likelihood_file_name = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_likelihoods_v2.nc')
     lik = decoder.likelihoods
     lik['ripple_grp']=-1
     lik=lik.reset_index()
