@@ -765,6 +765,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             self.shortcut_msg_on = message.shortcut_message_on
             self.instructive = message.instructive_task
             self.reward_mode = message.reward_mode
+            self.min_duration_head_angle = message.min_duration
+            self.to_well_angle_range = message.well_angle_range
+            self.within_angle_range = message.within_angle_range
             #if self.decoder_1_count % 200 == 0:
             #    print('posterior threshold:', self.posterior_arm_threshold,
             #        'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
