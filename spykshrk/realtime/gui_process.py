@@ -25,7 +25,10 @@ DEFAULT_SEND_PARAMS = {
     "encoding_velocity_threshold" : 10,
     "shortcut_message_on" : False,
     "instructive_task" : False,
-    "reward_mode" : "replay"
+    "reward_mode" : "replay",
+    "min_duration" : 2,
+    "well_angle_range" : 15,
+    "within_angle_range": 10
 }
 
 DEFAULT_GUI_PARAMS = {
@@ -37,7 +40,8 @@ class GuiMainParameterMessage(PrintableMessage):
         self, target_arm:int, posterior_threshold:float,
         num_above_threshold:int, max_center_well_distance:float,
         ripple_velocity_threshold:float, shortcut_message_on:bool,
-        instructive_task:bool, reward_mode:str):
+        instructive_task:bool, reward_mode:str, min_duration:float,
+        well_angle_range:float, within_angle_range:float):
 
         self.target_arm = target_arm
         self.posterior_threshold = posterior_threshold
@@ -47,6 +51,9 @@ class GuiMainParameterMessage(PrintableMessage):
         self.shortcut_message_on = shortcut_message_on
         self.instructive_task = instructive_task
         self.reward_mode = reward_mode
+        self.min_duration = min_duration
+        self.well_angle_range = well_angle_range
+        self.within_angle_range = within_angle_range
 
 class GuiRippleParameterMessage(PrintableMessage):
     def __init__(self, ripple_threshold:float, conditioning_ripple_threshold:float):
@@ -100,7 +107,8 @@ class Dialog(QDialog):
         # is initialized during setup and mutated when the user presses
         # the send button
         self.main_params = GuiMainParameterMessage(
-            None, None, None, None, None, None, None, None
+            None, None, None, None, None, None,
+            None, None, None, None, None
         )
         self.ripple_params = GuiRippleParameterMessage(
             None, None
@@ -128,6 +136,9 @@ class Dialog(QDialog):
         self.setup_conditioning_ripple_thresh(layout)
         self.setup_ripple_vel_thresh(layout)
         self.setup_encoding_vel_thresh(layout)
+        self.setup_min_duration(layout)
+        self.setup_well_angle_range(layout)
+        self.setup_within_angle_range(layout)
         self.setup_shortcut_message(layout)
         self.setup_instructive_task(layout)
         self.setup_reward_mode(layout)
@@ -284,9 +295,63 @@ class Dialog(QDialog):
         self.encoder_params.encoding_velocity_threshold = value
         self.decoder_params.encoding_velocity_threshold = value
 
+    def setup_min_duration(self, layout):
+        self.min_duration_label = QLabel(self.tr("Min duration head angle"))
+        layout.addWidget(self.min_duration_label, 8, 0)
+
+        self.min_duration_edit = QLineEdit()
+        layout.addWidget(self.min_duration_edit, 8, 1)
+
+        self.min_duration_button = QPushButton(self.tr("Update"))
+        self.min_duration_button.pressed.connect(self.check_min_duration)
+        layout.addWidget(self.min_duration_button, 8, 2)
+
+        try:
+            value = float(self.config['head_direction']['min_duration'])
+        except KeyError:
+            value = float(DEFAULT_SEND_PARAMS['min_duration'])
+        self.min_duration_edit.setText(str(value))
+        self.main_params.min_duration = value
+
+    def setup_well_angle_range(self, layout):
+        self.well_angle_range_label = QLabel(self.tr("Well angle range"))
+        layout.addWidget(self.well_angle_range_label, 9, 0)
+
+        self.well_angle_range_edit = QLineEdit()
+        layout.addWidget(self.well_angle_range_edit, 9, 1)
+
+        self.well_angle_range_button = QPushButton(self.tr("Update"))
+        self.well_angle_range_button.pressed.connect(self.check_well_angle_range)
+        layout.addWidget(self.well_angle_range_button, 9, 2)
+
+        try:
+            value = self.config['head_direction']['well_angle_range']
+        except KeyError:
+            value = DEFAULT_SEND_PARAMS['well_angle_range']
+        self.well_angle_range_edit.setText(str(value))
+        self.main_params.well_angle_range = value
+
+    def setup_within_angle_range(self, layout):
+        self.within_angle_range_label = QLabel(self.tr("Within angle range"))
+        layout.addWidget(self.within_angle_range_label, 10, 0)
+
+        self.within_angle_range_edit = QLineEdit()
+        layout.addWidget(self.within_angle_range_edit, 10, 1)
+
+        self.within_angle_range_button = QPushButton(self.tr("Update"))
+        self.within_angle_range_button.pressed.connect(self.check_within_angle_range)
+        layout.addWidget(self.within_angle_range_button, 10, 2)
+
+        try:
+            value = self.config['head_direction']['within_angle_range']
+        except KeyError:
+            value = DEFAULT_SEND_PARAMS['within_angle_range']
+        self.within_angle_range_edit.setText(str(value))
+        self.main_params.within_angle_range = value
+
     def setup_shortcut_message(self, layout):
         self.shortcut_label = QLabel(self.tr("Shortcut Message"))
-        layout.addWidget(self.shortcut_label, 8, 0)
+        layout.addWidget(self.shortcut_label, 11, 0)
         
         self.shortcut_on = QRadioButton(self.tr("ON"))        
         self.shortcut_off = QRadioButton(self.tr("OFF"))
@@ -295,11 +360,11 @@ class Dialog(QDialog):
         shortcut_layout.addWidget(self.shortcut_off)
         shortcut_group_box = QGroupBox()
         shortcut_group_box.setLayout(shortcut_layout)
-        layout.addWidget(shortcut_group_box, 8, 1)
+        layout.addWidget(shortcut_group_box, 11, 1)
 
         self.shortcut_message_button = QPushButton(self.tr("Update"))
         self.shortcut_message_button.pressed.connect(self.check_shortcut)
-        layout.addWidget(self.shortcut_message_button, 8, 2)
+        layout.addWidget(self.shortcut_message_button, 11, 2)
 
         try:
             if bool(self.config['ripple_conditioning']['shortcut_msg_on']):
@@ -318,7 +383,7 @@ class Dialog(QDialog):
 
     def setup_instructive_task(self, layout):
         self.instructive_task_label = QLabel(self.tr("Instructive Task"))
-        layout.addWidget(self.instructive_task_label, 9, 0)
+        layout.addWidget(self.instructive_task_label, 12, 0)
 
         self.instructive_task_on = QRadioButton(self.tr("ON"))        
         self.instructive_task_off = QRadioButton(self.tr("OFF"))
@@ -327,11 +392,11 @@ class Dialog(QDialog):
         instructive_task_layout.addWidget(self.instructive_task_off)
         instructive_task_group_box = QGroupBox()
         instructive_task_group_box.setLayout(instructive_task_layout)
-        layout.addWidget(instructive_task_group_box, 9, 1)
+        layout.addWidget(instructive_task_group_box, 12, 1)
 
         self.instructive_task_button = QPushButton(self.tr("Update"))
         self.instructive_task_button.pressed.connect(self.check_instructive_task)
-        layout.addWidget(self.instructive_task_button, 9, 2)
+        layout.addWidget(self.instructive_task_button, 12, 2)
 
         try:
             if bool(self.config['ripple_conditioning']['instructive']):
@@ -355,7 +420,7 @@ class Dialog(QDialog):
 
     def setup_reward_mode(self, layout):
         self.reward_mode_label = QLabel(self.tr("Reward Mode"))
-        layout.addWidget(self.reward_mode_label, 10, 0)
+        layout.addWidget(self.reward_mode_label, 13, 0)
 
         self.reward_mode_conditioning_ripples = QRadioButton(self.tr("Conditioning ripples"))        
         self.reward_mode_replay = QRadioButton(self.tr("Replay"))
@@ -364,11 +429,11 @@ class Dialog(QDialog):
         reward_mode_layout.addWidget(self.reward_mode_replay)
         reward_mode_group_box = QGroupBox()
         reward_mode_group_box.setLayout(reward_mode_layout)
-        layout.addWidget(reward_mode_group_box, 10, 1)
+        layout.addWidget(reward_mode_group_box, 13, 1)
 
         self.reward_mode_button = QPushButton(self.tr("Update"))
         self.reward_mode_button.pressed.connect(self.check_reward_mode)
-        layout.addWidget(self.reward_mode_button, 10, 2)
+        layout.addWidget(self.reward_mode_button, 13, 2)
 
         try:
             if self.config["reward_mode"] == "conditioning_ripples":
@@ -613,6 +678,69 @@ class Dialog(QDialog):
                 self,
                 "Encoding velocity threshold must be a non-negative number",
                 kind="critical")
+
+    def check_min_duration(self):
+        min_duration = self.min_duration_edit.text()
+        try:
+            min_duration = float(min_duration)
+            # do we want to validate eventually?
+
+            self.main_params.min_duration = min_duration
+            self.send_main_params()
+            show_message(
+                self,
+                f"Message sent - Min head direction duration value: {min_duration}",
+                kind="information"
+            )
+
+        except:
+            show_message(
+                self,
+                "Min duration head angle must be a non-negative number",
+                kind="critical"
+            )
+
+    def check_well_angle_range(self):
+        well_angle_range = self.well_angle_range_edit.text()
+        try:
+            well_angle_range = float(well_angle_range)
+            # do we want to validate eventually?
+
+            self.main_params.well_angle_range = well_angle_range
+            self.send_main_params()
+            show_message(
+                self,
+                f"Message sent - Well angle range value: {well_angle_range}",
+                kind="information"
+            )
+
+        except:
+            show_message(
+                self,
+                "Well angle range must be a non-negative number",
+                kind="critical"
+            )
+
+    def check_within_angle_range(self):
+        within_angle_range = self.within_angle_range_edit.text()
+        try:
+            withinangle_range = float(within_angle_range)
+            # do we want to validate eventually?
+
+            self.main_params.within_angle_range = within_angle_range
+            self.send_main_params()
+            show_message(
+                self,
+                f"Message sent - Within angle range value: {within_angle_range}",
+                kind="information"
+            )
+
+        except:
+            show_message(
+                self,
+                "Within angle range must be a non-negative number",
+                kind="critical"
+            )       
 
     def check_shortcut(self):
 
