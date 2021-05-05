@@ -29,12 +29,13 @@ class RSTParameter:
 
 
 class RSTKernelEncoderQuery(PrintableMessage):
-    _header_byte_fmt = '=qiii'
+    _header_byte_fmt = '=qiiii'
     _header_byte_len = struct.calcsize(_header_byte_fmt)
 
-    def __init__(self, query_time, elec_grp_id, query_weights, query_positions, query_hist):
+    def __init__(self, query_time, elec_grp_id, nearby_spikes, query_weights, query_positions, query_hist):
         self.query_time = query_time
         self.elec_grp_id = elec_grp_id
+        self.nearby_spikes = nearby_spikes
         self.query_weights = query_weights
         self.query_positions = query_positions
         self.query_hist = query_hist
@@ -48,6 +49,7 @@ class RSTKernelEncoderQuery(PrintableMessage):
         message_bytes = struct.pack(self._header_byte_fmt,
                                     self.query_time,
                                     self.elec_grp_id,
+                                    self.nearby_spikes,
                                     query_byte_len,
                                     query_hist_byte_len)
 
@@ -58,7 +60,7 @@ class RSTKernelEncoderQuery(PrintableMessage):
 
     @classmethod
     def unpack(cls, message_bytes):
-        query_time, elec_grp_id, query_len, query_hist_len = struct.unpack(cls._header_byte_fmt,
+        query_time, elec_grp_id, nearby_spikes, query_len, query_hist_len = struct.unpack(cls._header_byte_fmt,
                                                                          message_bytes[0:cls._header_byte_len])
 
         query_weights = np.frombuffer(message_bytes[cls._header_byte_len: cls._header_byte_len+query_len],
@@ -71,8 +73,8 @@ class RSTKernelEncoderQuery(PrintableMessage):
         query_hist = np.frombuffer(message_bytes[cls._header_byte_len+2*query_len:
                                                  cls._header_byte_len+2*query_len+query_hist_len])
 
-        return cls(query_time=query_time, elec_grp_id=elec_grp_id, query_weights=query_weights,
-                   query_positions=query_positions, query_hist=query_hist)
+        return cls(query_time=query_time, elec_grp_id=elec_grp_id, nearby_spikes=nearby_spikes,
+                query_weights=query_weights, query_positions=query_positions, query_hist=query_hist)
 
 
 class RSTKernelEncoder:
@@ -304,6 +306,7 @@ class RSTKernelEncoder:
 
             return RSTKernelEncoderQuery(query_time=time,
                                         elec_grp_id=elec_grp_id,
+                                        nearby_spikes=np.sum(in_range),
                                         query_weights=query_weights,
                                         query_positions=query_positions,
                                         query_hist=query_hist)

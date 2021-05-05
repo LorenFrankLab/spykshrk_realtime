@@ -300,7 +300,7 @@ class PosteriorSumRecvInterface(realtime_base.RealtimeMPIClass):
         # NOTE: if you dont know how large the buffer should be, set it to a large number
         # then you will get an error saying what it should be set to
         # bytearray was 80 before adding spike_count, 92 before adding rank
-        self.msg_buffer = bytearray(132)
+        self.msg_buffer = bytearray(192)
         self.req = self.comm.Irecv(
             buf=self.msg_buffer, tag=realtime_base.MPIMessageTag.POSTERIOR.value)
 
@@ -841,6 +841,7 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 tetrode_ids = self.enc_cred_int_array[mask]
                 tetrode_ids = tetrode_ids[tetrode_ids != 0]
                 if np.unique(tetrode_ids).shape[0] >= self.min_unique_tets:
+                    print('number tets after likelihood filter',np.unique(tetrode_ids).shape[0])
 
                     # NOTE: we can now replace this with the actual shortcut message!
                     networkclient.send_statescript_shortcut_message(14)
@@ -935,23 +936,37 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
 
         record_head_direction_stim = False
         
+        if self.decoder_1_count % 200 == 0:
+            print('angle buffer',is_within_angle_range,'angle diff',abs(angle - angle_well_1),
+                'target',angle_well_1,flush=True)
+
         # this will only work if the angles to the wells +/- the acceptable angle range
         # do not overlap! otherwise we could end up with a situation where the animal's
         # head direction is detected to be pointing to multiple wells
         if (is_within_angle_range and is_in_center_well_proximity and
             abs(angle - angle_well_1) <= self.to_well_angle_range):
+            self.head_direction_stim_time = time.time()
             
-            networkclient.send_statescript_shortcut_message(14)
-            self.class_log.info("Statescript trigger for well 1")
+            print('head direction event arm 1',angle,
+                np.around(bin_timestamp/30/1000,decimals=2))
+            if self.taskState == 2:
+                networkclient.send_statescript_shortcut_message(14)
+                self.class_log.info("Statescript trigger for well 1")
+
             well = 1
             record_head_direction_stim = True
-        if (is_within_angle_range and is_in_center_well_proximity and
-            abs(angle - angle_well_2) <= self.to_well_angle_range):
 
-            networkclient.send_statescript_shortcut_message(14)
-            self.class_log.info("Statescript trigger for well 2")
-            well = 2
-            record_head_direction_stim = True
+        #if (is_within_angle_range and is_in_center_well_proximity and
+        #    abs(angle - angle_well_2) <= self.to_well_angle_range):
+        #    self.head_direction_stim_time = time.time()
+            
+        #    print('head direction event arm 2',np.around(bin_timestamp/30/1000,decimals=2))
+        #    if self.taskState == 2:
+        #        networkclient.send_statescript_shortcut_message(14)
+        #        self.class_log.info("Statescript trigger for well 2")
+
+        #    well = 2
+        #    record_head_direction_stim = True
 
         if record_head_direction_stim:
             self.write_record(
@@ -1079,6 +1094,23 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     f.seek(-2, os.SEEK_CUR)
                 self.taskState = int(f.readline().decode()[0:1])
             print('main taskState:',self.taskState)
+
+            with open('config/angle_range.txt', 'rb') as angle_range_file:
+                fd = angle_range_file.fileno()
+                fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                #f.seek(-2, os.SEEK_END)
+                #while f.read(1) != b'\n':
+                #    f.seek(-2, os.SEEK_CUR)
+                for angle_file_line in angle_range_file:
+                    pass
+                new_angle_parameters = angle_file_line
+            if len(new_angle_parameters) == 8:
+                self.within_angle_range = np.int(new_angle_parameters[0:2])
+                self.min_duration_head_angle = np.int(new_angle_parameters[3:4])
+                self.to_well_angle_range = np.int(new_angle_parameters[5:7])
+            #print(len(new_angle_parameters))
+            print('angle parameters:',self.within_angle_range,self.min_duration_head_angle,
+                'well angle',self.to_well_angle_range)
 
             if self.decoder_1_count % 1200 == 0:
                 print('posterior threshold:', self.posterior_arm_threshold,

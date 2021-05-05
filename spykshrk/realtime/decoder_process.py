@@ -97,8 +97,7 @@ class PosteriorSum(rt_logging.PrintableMessage):
         posterior_max, rank,tet1,tet2,tet3,tet4,tet5,
         tet6,tet7,tet8,tet9,tet10,
         lk_argmax1, lk_argmax2, lk_argmax3, lk_argmax4, lk_argmax5,
-        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10, = struct.unpack(
-            cls._byte_format, message_bytes)
+        lk_argmax6, lk_argmax7, lk_argmax8, lk_argmax9, lk_argmax10) = struct.unpack(cls._byte_format, message_bytes)
         return cls(bin_timestamp=bin_timestamp, spike_timestamp=spike_timestamp, target=target, offtarget=offtarget,
                 box=box, arm1=arm1, arm2=arm2, arm3=arm3, arm4=arm4, arm5=arm5, arm6=arm6, arm7=arm7, arm8=arm8, 
                 spike_count=spike_count,crit_ind=crit_ind, posterior_max=posterior_max, rank=rank,
@@ -1533,7 +1532,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                            for x in range(config['encoder']['position']['bins'])],
                                                           ['timestamp', 'elec_grp_id',
                                                               'real_bin', 'late_bin'],
-                                                          ['bin_timestamp', 'bin', 'raw_x', 'raw_y', 'raw_x2', 'raw_y2',
+                                                          ['bin_timestamp', 'bin', 'raw_x', 'raw_y', 'raw_x2', 'raw_y2','angle',
                                                            'segment', 'pos_on_seg',
                                                            'linear_pos', 'velocity','dec_rank'] + ['x{:0{dig}d}'.
                                                                         format(x, dig=len(str(config['encoder']['position']['bins'])))
@@ -1542,7 +1541,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                             + 'd' * config['encoder']['position']['bins'] + 'd' * len(state_labels),
                                                            'qddqq' + 'd' * config['encoder']['position']['bins'],
                                                            'qiii',
-                                                           'qqqqqqqdddq' + 'd' * config['encoder']['position']['bins']])
+                                                           'qqqqqqdqdddq' + 'd' * config['encoder']['position']['bins']])
         # i think if you change second q to d above, then you can replace real_pos_time
         # with velocity
         # NOTE: q is symbol for integer, d is symbol for decimal
@@ -1863,8 +1862,8 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
             # no spikes in time bin of interest
             else:
                 self.spike_count = 0
-                    self.enc_cred_int_array = [0] * 10
-                    self.lk_argmax_array = [-1] * 10
+                self.enc_cred_int_array = [0] * 10
+                self.lk_argmax_array = [-1] * 10
                 self.spike_timestamp = 0
 
                 # run increment no spike
@@ -1953,29 +1952,32 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                                                             pos_data=current_pos, vel_data=self.current_vel,
                                                             taskState=self.taskState)
 
+
+                angle = (
+                    (180/np.pi) *
+                    np.arctan2(
+                        pos_data.y2 - pos_data.y,
+                        pos_data.x2 - pos_data.x))
+                angle_well_1 = np.random.choice([108])
+                    #(180/np.pi) *
+                    #np.arctan2(
+                    #    self.well_1_y - pos_data.y,
+                    #    self.well_1_x - pos_data.x))
+                    
+                angle_well_2 = np.random.choice([72])
+                    #(180/np.pi) *
+                    #np.arctan2(
+                    #    self.well_2_y - pos_data.y,
+                    #    self.well_2_x - pos_data.x))
+                    
+
                 # save record with occupancy
                 # TO DO: save raw X and raw Y also
                 self.write_record(realtime_base.RecordIDs.OCCUPANCY,
                                   pos_data.timestamp, self.current_time_bin,
-                                  pos_data.x, pos_data.y, pos_data.x2, pos_data.y2,
+                                  pos_data.x, pos_data.y, pos_data.x2, pos_data.y2, angle,
                                   pos_data.segment, pos_data.position,
                                   current_pos, self.current_vel, self.rank, *occupancy)
-
-                angle = (
-                    180 * np.pi *
-                    np.arctan2(
-                        pos_data.y2 - pos_data.y,
-                        pos_data.x2 - pos_data.x))
-                angle_well_1 = (
-                    180 * np.pi *
-                    np.arctan2(
-                        self.well_1_y - pos_data.y,
-                        self.well_1_x - pos_data.x))
-                angle_well_2 = (
-                    180 * np.pi *
-                    np.arctan2(
-                        self.well_2_y - pos_data.y,
-                        self.well_2_x - pos_data.x))
 
                 # send message VEL_POS to main_process so that shortcut message can by filtered by velocity and position
                 # note: used to send bin_timestamp, but main process doesnt use the timestamp for anything, so 
@@ -1989,7 +1991,7 @@ class PPDecodeManager(realtime_base.BinaryRecordBaseWithTiming):
                 if self.pos_msg_counter % 150 == 0:
                     print('position =', current_pos, ' and velocity =', np.around(self.current_vel, decimals=2),
                           'segment =', pos_data.segment,
-                          'raw_x', pos_data.x, 'raw_y', pos_data.y)
+                          'raw_x', pos_data.x, 'raw_y', pos_data.y, 'angle',np.around(angle,decimals=2))
 
 
                 # read taskstate.txt for taskState - needs to be updated manually at begin of session

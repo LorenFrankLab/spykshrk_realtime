@@ -232,13 +232,13 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                                               ['timestamp',
                                                                'elec_grp_id','ch1','ch2','ch3','ch4',
                                                                'position','velocity','encode_spike',
-                                                               'cred_int','decoder_num'] +
+                                                               'cred_int','decoder_num','neraby_spikes'] +
                                                               ['x{:0{dig}d}'.
                                                                format(x, dig=len(str(config['encoder']
                                                                                      ['position']['bins'])))
                                                                for x in range(config['encoder']['position']['bins'])]],
                                                   rec_formats=['qidd',
-                                                               'qiddddddqqq'+'d'*config['encoder']['position']['bins']])
+                                                               'qiddddddqqqq'+'d'*config['encoder']['position']['bins']])
 
         self.rank = rank
         self.config = config
@@ -279,6 +279,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
         self.spike_elec_grp_id = 0
         self.decoder_number = 0
         self.encoding_spike = 0
+        self.nearby_spikes = 0
 
         self.spxx = []
         self.crit_ind = 0
@@ -404,6 +405,8 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                         datapoint.elec_grp_id)          # type: kernel_encoder.RSTKernelEncoderQuery
                     #print('decoded spike',query_result.query_hist)
                     if query_result is not None:
+                        self.nearby_spikes = query_result.nearby_spikes
+                        #print('nearby spikes',query_result.nearby_spikes)
 
                         #self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
                         #            datatype=datatypes.Datatypes.SPIKES, label='kde_end')
@@ -455,7 +458,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                         query_result.elec_grp_id,
                                         amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
                                         self.current_pos,self.current_vel,self.encoding_spike,
-                                        self.crit_ind,self.decoder_number,
+                                        self.crit_ind,self.decoder_number,self.nearby_spikes,
                                         *query_result.query_hist)
                         #print('query hist shape',query_result.query_hist.shape)
 
@@ -479,7 +482,7 @@ class RStarEncoderManager(realtime_base.BinaryRecordBaseWithTiming):
                                         datapoint.elec_grp_id,
                                         amp_marks[0],amp_marks[1],amp_marks[2],amp_marks[3],
                                         self.current_pos,self.current_vel,self.encoding_spike,
-                                        self.crit_ind,self.decoder_number,
+                                        self.crit_ind,self.decoder_number,0,
                                         *np.zeros(41))
 
                     # this adds the current spike to the R Star Tree
