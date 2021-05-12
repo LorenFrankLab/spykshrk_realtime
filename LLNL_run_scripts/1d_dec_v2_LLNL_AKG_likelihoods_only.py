@@ -194,7 +194,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
 
     decode_settings = trodes2SS.AttrDict({'trans_smooth_std': 2,
                                     'trans_uniform_gain': 0.0001,
-                                    'time_bin_size':60})
+                                    'time_bin_size':600})
 
     sungod_trans_mat = sungod_util.calc_sungod_trans_mat(encode_settings, decode_settings)
 
@@ -240,7 +240,7 @@ def main(path_base, rat_name, day, epoch, shift_amt, path_out):
 
     #cell 15.1
     # just save likelihoods to netcdf
-    likelihood_file_name = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_likelihoods_v2.nc')
+    likelihood_file_name = os.path.join(path_out,  rat_name + '_' + str(day) + '_' + str(epoch) + '_shuffle_' + str(shift_amount) + '_likelihoods_v2_20ms.nc')
     lik = decoder.likelihoods
     lik['ripple_grp']=-1
     lik=lik.reset_index()
