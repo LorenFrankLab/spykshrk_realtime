@@ -590,7 +590,9 @@ class RippleFilter(rt_logging.LoggingClass):
         # rec_format='Ii??dd',
         #if self.current_time < 40000000:
         # 4-30: replace self._custom_baseline_mean, self._custom_baseline_std, with rip_mean and rip_std
-        if self.lfp_display_counter % 10 == 0:
+        
+        #if self.lfp_display_counter % 10 == 0:
+        if self.elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0]:
             self.rec_base.write_record(realtime_base.RecordIDs.RIPPLE_STATE,
                                    self.current_time, self.elec_grp_id, self.param.ripple_threshold,
                                    self.conditioning_ripple_threshold, self.thresh_crossed,
@@ -765,12 +767,16 @@ class RippleManager(realtime_base.BinaryRecordBaseWithTiming, rt_logging.Logging
                 #     self.record_timing(timestamp=datapoint.timestamp, elec_grp_id=datapoint.elec_grp_id,
                 #                         datatype=datatypes.Datatypes.LFP, label='rip_send')
                 # this sends to stim_decider class in main_process.py that then applies the # of tetrode filter
-                self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,
+                if self.lfp_counter % (self.time_bin_size/20) == 0:
+                    self.mpi_send.send_ripple_thresh_state(timestamp=datapoint.timestamp,
                                                        elec_grp_id=datapoint.elec_grp_id,
                                                        thresh_state=filter_state,
                                                        conditioning_thresh_state=conditioning_filter_state)
                 #also send thresh cross to decoder - only for rank == 2 aka first ripple_node
-                if self.rank == self.config['rank']['ripples'][0] and self.lfp_counter % (self.time_bin_size/20) == 0:
+                # I think this is still failing with >1 ripple tet per node
+                #if self.rank == self.config['rank']['ripples'][0] and self.lfp_counter % (self.time_bin_size/20) == 0:
+                if datapoint.elec_grp_id == self.config['trodes_network']['ripple_tetrodes'][0] and self.lfp_counter % (self.time_bin_size/20) == 0:
+                    #print('lfp send timestamp',datapoint.timestamp)    
                     self.mpi_send.send_ripple_thresh_state_decoder(timestamp=datapoint.timestamp,
                                                            elec_grp_id=datapoint.elec_grp_id,
                                                            thresh_state=filter_state,

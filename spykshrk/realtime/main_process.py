@@ -739,10 +739,11 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self._ripple_lockout_count += 1
 
             # detect ripples 
-            if ((num_above >= self._ripple_n_above_thresh) and not self._in_ripple_lockout):
-                if self.velocity < self.ripple_detect_velocity:
-                    print('detection of ripple. timestamp',self.bin_timestamp_1, 
-                    'ripple num:',self._ripple_lockout_count)
+            if (num_above >= self._ripple_n_above_thresh and not self._in_ripple_lockout
+                and self.velocity < self.ripple_detect_velocity):
+                #if self.config['ripple_conditioning']['session_type'] == 'run':
+                #    print('detection of ripple. timestamp',self.bin_timestamp_1, 
+                #    'ripple num:',self._ripple_lockout_count)
 
                 # this starts the lockout for the content ripple threshold and tells us there is a ripple
                 self._in_ripple_lockout = True
@@ -765,9 +766,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             self.shortcut_msg_on = message.shortcut_message_on
             self.instructive = message.instructive_task
             self.reward_mode = message.reward_mode
-            self.min_duration_head_angle = message.min_duration
-            self.to_well_angle_range = message.well_angle_range
-            self.within_angle_range = message.within_angle_range
+            self.min_duration_head_angle = np.int(message.min_duration)
+            self.to_well_angle_range =  np.int(message.well_angle_range)
+            self.within_angle_range = np.int(message.within_angle_range)
             #if self.decoder_1_count % 200 == 0:
             #    print('posterior threshold:', self.posterior_arm_threshold,
             #        'rip num tets',self._ripple_n_above_thresh,'ripple vel', self.ripple_detect_velocity, 
@@ -799,7 +800,8 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                     np.around(self.target_sum_avg_2,decimals=3),
                     'offtarget',np.around(self.offtarget_sum_avg_1,decimals=3),
                    np.around(self.offtarget_sum_avg_2,decimals=3))
-            print('ripple tetrodes',self.ripple_tet_num_array,self.ripple_tet_num_avg)
+            #print('ripple tetrodes',self.ripple_tet_num_array,self.ripple_tet_num_avg)
+            print('ripple tets above threshold',self.ripple_num_tet_above)
             print('unique tets with good spike',np.nonzero(np.unique(self.enc_cred_int_array))[0].shape[0])
         # for task1 and 3, try just printing when he is in box
         #elif self.config['ripple_conditioning']['session_type'] == 'run':
@@ -832,6 +834,9 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
             # 12-23: added filter for unqiue good tets
             # this should be for conditioning - remove crit_ind filter
             # was lfp_timestamp, now bin_timestamp_1
+            # 5-9-21: add ripple requirement - number of tets and velocity
+            # self.ripple_num_tet_above>=self._ripple_n_above_thresh
+            # self.velocity < self.ripple_detect_velocity
             if (self.taskState == 2 and self.shortcut_message_arm == self.replay_target_arm and
                 (self.bin_timestamp_1 > self._trodes_message_lockout_timestamp + self._trodes_message_lockout)
                 and self.reward_mode == "replay" and self.shortcut_msg_on and not self.instructive and 
@@ -940,34 +945,33 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
         record_head_direction_stim = False
         
         if self.decoder_1_count % 200 == 0:
-            print('angle buffer',is_within_angle_range,'angle diff',abs(angle - angle_well_1),
-                'target',angle_well_1,flush=True)
+            print('angle buffer',is_within_angle_range,'angle diff',abs(angle - angle_well_2),
+                'target',angle_well_2,flush=True)
 
         # this will only work if the angles to the wells +/- the acceptable angle range
         # do not overlap! otherwise we could end up with a situation where the animal's
         # head direction is detected to be pointing to multiple wells
-        if (is_within_angle_range and is_in_center_well_proximity and
-            abs(angle - angle_well_1) <= self.to_well_angle_range):
-            self.head_direction_stim_time = time.time()
-            
-            print('head direction event arm 1',angle,
-                np.around(bin_timestamp/30/1000,decimals=2))
-            if self.taskState == 2:
-                networkclient.send_statescript_shortcut_message(14)
-                self.class_log.info("Statescript trigger for well 1")
-
-            well = 1
-            record_head_direction_stim = True
-
         #if (is_within_angle_range and is_in_center_well_proximity and
+        #    abs(angle - angle_well_1) <= self.to_well_angle_range):
+        #    self.head_direction_stim_time = time.time()
+            
+        #    print('head direction event arm 1',angle,
+        #            np.around(bin_timestamp/30/1000,decimals=2))
+        #    if self.taskState == 2:
+        #        networkclient.send_statescript_shortcut_message(14)
+        #        self.class_log.info("Statescript trigger for well 1")
+        #    well = 1
+        #    record_head_direction_stim = True
+
+        # if (is_within_angle_range and is_in_center_well_proximity and
         #    abs(angle - angle_well_2) <= self.to_well_angle_range):
         #    self.head_direction_stim_time = time.time()
             
-        #    print('head direction event arm 2',np.around(bin_timestamp/30/1000,decimals=2))
+        #    print('head direction event arm 2',angle,
+        #         np.around(bin_timestamp/30/1000,decimals=2))
         #    if self.taskState == 2:
         #        networkclient.send_statescript_shortcut_message(14)
         #        self.class_log.info("Statescript trigger for well 2")
-
         #    well = 2
         #    record_head_direction_stim = True
 
@@ -1098,20 +1102,20 @@ class StimDecider(realtime_base.BinaryRecordBaseWithTiming):
                 self.taskState = int(f.readline().decode()[0:1])
             print('main taskState:',self.taskState)
 
-            with open('config/angle_range.txt', 'rb') as angle_range_file:
-                fd = angle_range_file.fileno()
-                fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-                #f.seek(-2, os.SEEK_END)
-                #while f.read(1) != b'\n':
-                #    f.seek(-2, os.SEEK_CUR)
-                for angle_file_line in angle_range_file:
-                    pass
-                new_angle_parameters = angle_file_line
-            if len(new_angle_parameters) == 8:
-                self.within_angle_range = np.int(new_angle_parameters[0:2])
-                self.min_duration_head_angle = np.int(new_angle_parameters[3:4])
-                self.to_well_angle_range = np.int(new_angle_parameters[5:7])
-            #print(len(new_angle_parameters))
+            # with open('config/angle_range.txt', 'rb') as angle_range_file:
+            #     fd = angle_range_file.fileno()
+            #     fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+            #     #f.seek(-2, os.SEEK_END)
+            #     #while f.read(1) != b'\n':
+            #     #    f.seek(-2, os.SEEK_CUR)
+            #     for angle_file_line in angle_range_file:
+            #         pass
+            #     new_angle_parameters = angle_file_line
+            # if len(new_angle_parameters) == 8:
+            #     self.within_angle_range = np.int(new_angle_parameters[0:2])
+            #     self.min_duration_head_angle = np.int(new_angle_parameters[3:4])
+            #     self.to_well_angle_range = np.int(new_angle_parameters[5:7])
+            # #print(len(new_angle_parameters))
             print('angle parameters:',self.within_angle_range,self.min_duration_head_angle,
                 'well angle',self.to_well_angle_range)
 
